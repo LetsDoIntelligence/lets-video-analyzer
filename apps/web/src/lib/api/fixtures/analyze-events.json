@@ -1,0 +1,363 @@
+[
+  {
+    "question": "how many cars are in the video?",
+    "events": [
+      {
+        "type": "text",
+        "chunk": "I counted **108 cars** in Synthetic traffic (the entire video).\n\nDemo mode: these numbers are simulated. Real detection is connected in a later phase."
+      },
+      {
+        "type": "blocks",
+        "blocks": [
+          {
+            "type": "stat",
+            "label": "cars",
+            "value": 108.0,
+            "caption": "0:00 \u2013 10:00 \u00b7 Synthetic traffic"
+          },
+          {
+            "type": "chart",
+            "title": "Cars over time",
+            "data": [
+              {
+                "label": "0:00",
+                "start": 0.0,
+                "value": 9.0
+              },
+              {
+                "label": "1:00",
+                "start": 60.0,
+                "value": 8.0
+              },
+              {
+                "label": "2:00",
+                "start": 120.0,
+                "value": 14.0
+              },
+              {
+                "label": "3:00",
+                "start": 180.0,
+                "value": 10.0
+              },
+              {
+                "label": "4:00",
+                "start": 240.0,
+                "value": 5.0
+              },
+              {
+                "label": "5:00",
+                "start": 300.0,
+                "value": 13.0
+              },
+              {
+                "label": "6:00",
+                "start": 360.0,
+                "value": 14.0
+              },
+              {
+                "label": "7:00",
+                "start": 420.0,
+                "value": 12.0
+              },
+              {
+                "label": "8:00",
+                "start": 480.0,
+                "value": 10.0
+              },
+              {
+                "label": "9:00",
+                "start": 540.0,
+                "value": 13.0
+              }
+            ]
+          },
+          {
+            "type": "timestamps",
+            "label": "Jump to first detections",
+            "times": [
+              2.4,
+              6.1,
+              15.9,
+              16.9,
+              28.6,
+              33.4
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "question": "how many red cars between 1:00 and 2:30? show a table",
+    "events": [
+      {
+        "type": "text",
+        "chunk": "I counted **3 red cars** in Synthetic traffic (1:00 \u2013 2:30).\n\nDemo mode: these numbers are simulated. Real detection is connected in a later phase."
+      },
+      {
+        "type": "blocks",
+        "blocks": [
+          {
+            "type": "stat",
+            "label": "red cars",
+            "value": 3.0,
+            "caption": "1:00 \u2013 2:30 \u00b7 Synthetic traffic"
+          },
+          {
+            "type": "chart",
+            "title": "Cars over time",
+            "data": [
+              {
+                "label": "1:00",
+                "start": 60.0,
+                "value": 1.0
+              },
+              {
+                "label": "1:10",
+                "start": 70.0,
+                "value": 1.0
+              },
+              {
+                "label": "1:20",
+                "start": 80.0,
+                "value": 0.0
+              },
+              {
+                "label": "1:30",
+                "start": 90.0,
+                "value": 0.0
+              },
+              {
+                "label": "1:40",
+                "start": 100.0,
+                "value": 0.0
+              },
+              {
+                "label": "1:50",
+                "start": 110.0,
+                "value": 0.0
+              },
+              {
+                "label": "2:00",
+                "start": 120.0,
+                "value": 0.0
+              },
+              {
+                "label": "2:10",
+                "start": 130.0,
+                "value": 1.0
+              },
+              {
+                "label": "2:20",
+                "start": 140.0,
+                "value": 0.0
+              }
+            ]
+          },
+          {
+            "type": "timestamps",
+            "label": "Jump to first detections",
+            "times": [
+              62.3,
+              78.0,
+              136.5
+            ]
+          },
+          {
+            "type": "table",
+            "title": "First detections (3 of 3)",
+            "columns": [
+              {
+                "key": "n",
+                "label": "#",
+                "kind": "number"
+              },
+              {
+                "key": "time",
+                "label": "Time",
+                "kind": "time"
+              },
+              {
+                "key": "object",
+                "label": "Object"
+              },
+              {
+                "key": "confidence",
+                "label": "Confidence",
+                "kind": "percent"
+              }
+            ],
+            "rows": [
+              {
+                "n": 1.0,
+                "time": 62.3,
+                "object": "red car",
+                "confidence": 0.93
+              },
+              {
+                "n": 2.0,
+                "time": 78.0,
+                "object": "red car",
+                "confidence": 0.94
+              },
+              {
+                "n": 3.0,
+                "time": 136.5,
+                "object": "red car",
+                "confidence": 0.93
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "question": "how many people with helmets in the first 30 sec",
+    "events": [
+      {
+        "type": "text",
+        "chunk": "I counted **1 people wearing helmets** in Synthetic traffic (0:00 \u2013 0:30).\n\nDemo mode: these numbers are simulated. Real detection is connected in a later phase."
+      },
+      {
+        "type": "blocks",
+        "blocks": [
+          {
+            "type": "stat",
+            "label": "people wearing helmets",
+            "value": 1.0,
+            "caption": "0:00 \u2013 0:30 \u00b7 Synthetic traffic"
+          },
+          {
+            "type": "timestamps",
+            "label": "Jump to first detections",
+            "times": [
+              5.3
+            ]
+          },
+          {
+            "type": "table",
+            "title": "First detections (1 of 1)",
+            "columns": [
+              {
+                "key": "n",
+                "label": "#",
+                "kind": "number"
+              },
+              {
+                "key": "time",
+                "label": "Time",
+                "kind": "time"
+              },
+              {
+                "key": "object",
+                "label": "Object"
+              },
+              {
+                "key": "confidence",
+                "label": "Confidence",
+                "kind": "percent"
+              }
+            ],
+            "rows": [
+              {
+                "n": 1.0,
+                "time": 5.3,
+                "object": "person \u00b7 helmet",
+                "confidence": 0.92
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "question": "how many trees",
+    "events": [
+      {
+        "type": "text",
+        "chunk": "I counted **6 trees** in Synthetic traffic (the entire video).\n\nDemo mode: these numbers are simulated. Real detection is connected in a later phase."
+      },
+      {
+        "type": "blocks",
+        "blocks": [
+          {
+            "type": "stat",
+            "label": "trees",
+            "value": 6.0,
+            "caption": "0:00 \u2013 10:00 \u00b7 Synthetic traffic"
+          },
+          {
+            "type": "chart",
+            "title": "Trees over time",
+            "data": [
+              {
+                "label": "0:00",
+                "start": 0.0,
+                "value": 0.0
+              },
+              {
+                "label": "1:00",
+                "start": 60.0,
+                "value": 0.0
+              },
+              {
+                "label": "2:00",
+                "start": 120.0,
+                "value": 2.0
+              },
+              {
+                "label": "3:00",
+                "start": 180.0,
+                "value": 2.0
+              },
+              {
+                "label": "4:00",
+                "start": 240.0,
+                "value": 1.0
+              },
+              {
+                "label": "5:00",
+                "start": 300.0,
+                "value": 0.0
+              },
+              {
+                "label": "6:00",
+                "start": 360.0,
+                "value": 0.0
+              },
+              {
+                "label": "7:00",
+                "start": 420.0,
+                "value": 1.0
+              },
+              {
+                "label": "8:00",
+                "start": 480.0,
+                "value": 0.0
+              },
+              {
+                "label": "9:00",
+                "start": 540.0,
+                "value": 0.0
+              }
+            ]
+          },
+          {
+            "type": "timestamps",
+            "label": "Jump to first detections",
+            "times": [
+              131.1,
+              145.3,
+              219.5,
+              229.7,
+              293.3,
+              446.5
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

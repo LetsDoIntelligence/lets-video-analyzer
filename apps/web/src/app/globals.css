@@ -1,0 +1,142 @@
+@import "tailwindcss";
+
+/* ──────────────────────────────────────────────────────────────
+   LETS Video Analyzer — design tokens
+   Palette lifted from the lead's mockup: deep teal-blue with a
+   soft green. Dark is the default; light via [data-theme="light"].
+   ────────────────────────────────────────────────────────────── */
+
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas: #08202e;
+  --surface: #0e3045;
+  --surface-2: #134059;
+  --surface-3: #1a5272;
+  --line: rgb(190 230 245 / 0.1);
+  --line-strong: rgb(190 230 245 / 0.2);
+  --ink: #eaf5fa;
+  --ink-2: #a9c8d6;
+  --ink-3: #6f98ab;
+  --accent: #8cc68a;
+  --accent-hover: #a0d49e;
+  --accent-ink: #0a2a1a;
+  --accent-soft: rgb(140 198 138 / 0.14);
+  --positive: #8cc68a;
+  --danger: #f0907f;
+  --shadow-lg: 0 24px 50px -24px rgb(0 10 20 / 0.6);
+  --shadow-sm: 0 1px 2px rgb(0 10 20 / 0.35);
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --canvas: #e9f2f6;
+  --surface: #f7fbfd;
+  --surface-2: #ffffff;
+  --surface-3: #dbe9f0;
+  --line: rgb(10 60 90 / 0.1);
+  --line-strong: rgb(10 60 90 / 0.2);
+  --ink: #0b2a3d;
+  --ink-2: #44687b;
+  --ink-3: #7b9aaa;
+  --accent: #1d6f8f;
+  --accent-hover: #155a77;
+  --accent-ink: #ffffff;
+  --accent-soft: rgb(29 111 143 / 0.1);
+  --positive: #3d8a52;
+  --danger: #c0513f;
+  --shadow-lg: 0 20px 40px -24px rgb(10 60 90 / 0.25);
+  --shadow-sm: 0 1px 2px rgb(10 60 90 / 0.1);
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-positive: var(--positive);
+  --color-danger: var(--danger);
+
+  --font-sans: var(--font-dmsans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-dmsans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-dmmono), ui-monospace, monospace;
+
+  --shadow-lg: var(--shadow-lg);
+  --shadow-sm: var(--shadow-sm);
+
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1.75rem;
+
+  --ease-premium: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+html {
+  background: var(--canvas);
+}
+
+body {
+  background:
+    radial-gradient(1200px 600px at 12% -10%, var(--accent-soft), transparent 60%),
+    var(--canvas);
+  background-attachment: fixed;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  transition:
+    background-color 0.4s var(--ease-premium),
+    color 0.4s var(--ease-premium);
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+}
+
+/* Slim, quiet scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.animate-rise {
+  animation: rise 0.6s var(--ease-premium) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
