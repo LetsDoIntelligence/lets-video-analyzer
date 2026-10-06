@@ -32,7 +32,7 @@ npm run dev        # http://localhost:3000
 ```
 # terminal 1 - API on :8000 (see apps/api/README.md for setup)
 cd apps/api
-.\.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
+conda activate lets-video; lets-api          # http://localhost:8000 (auto-reload)
 
 # terminal 2 - web; create apps/web/.env.local with:
 #   NEXT_PUBLIC_USE_MOCKS=false
