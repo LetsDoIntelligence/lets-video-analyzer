@@ -5,12 +5,23 @@ from collections.abc import AsyncIterator
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy.orm import Session, sessionmaker
 
+from app.analysis.engine import answer
 from app.analysis.mock import build_reply
-from app.analysis.schemas import AnalyzeEvent, AnalyzeRequest, BlocksEvent, ErrorEvent, TextEvent
+from app.analysis.schemas import (
+    AnalyzeEvent,
+    AnalyzeRequest,
+    BlocksEvent,
+    ErrorEvent,
+    Reply,
+    TextEvent,
+)
 from app.config import Settings
+from app.models import Video
 
 logger = logging.getLogger("lets.api.analyze")
 router = APIRouter(tags=["analyze"])
@@ -28,11 +39,21 @@ def sse(event: BaseModel) -> str:
     return f"data: {event.model_dump_json(exclude_none=True)}\n\n"
 
 
-async def _events(req: AnalyzeRequest, settings: Settings) -> AsyncIterator[AnalyzeEvent]:
+def _reply(req: AnalyzeRequest, factory: sessionmaker[Session]) -> Reply:
+    """Real answer from the video's index; built-in sample videos (not stored) stay simulated."""
+    with factory() as session:
+        if session.get(Video, req.scope.videoId) is None:
+            return build_reply(req)
+        return answer(session, req)
+
+
+async def _events(
+    req: AnalyzeRequest, settings: Settings, factory: sessionmaker[Session]
+) -> AsyncIterator[AnalyzeEvent]:
     think = settings.analyze_think_ms / 1000
     token = settings.analyze_token_ms / 1000
     await asyncio.sleep(think)
-    reply = build_reply(req)
+    reply = await run_in_threadpool(_reply, req, factory)
     for chunk in re.findall(r"\S+\s*|\s+", reply.text):
         await asyncio.sleep(token)
         yield TextEvent(chunk=chunk)
@@ -42,15 +63,19 @@ async def _events(req: AnalyzeRequest, settings: Settings) -> AsyncIterator[Anal
 
 
 @router.post("/analyze")
-async def analyze(req: AnalyzeRequest, settings: SettingsDep) -> StreamingResponse:
+async def analyze(
+    req: AnalyzeRequest, request: Request, settings: SettingsDep
+) -> StreamingResponse:
     """Answer a question about a video as a Server-Sent Events stream.
 
-    Currently simulated (see app/analysis/mock.py); the contract is final.
+    Uploaded videos are answered from their detection/tracking index (app/analysis/engine.py);
+    built-in sample videos have no footage and get simulated answers (app/analysis/mock.py).
     """
+    factory: sessionmaker[Session] = request.app.state.session_factory
 
     async def stream() -> AsyncIterator[str]:
         try:
-            async for event in _events(req, settings):
+            async for event in _events(req, settings, factory):
                 yield sse(event)
         except asyncio.CancelledError:
             raise  # client went away
