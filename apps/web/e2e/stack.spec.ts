@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -47,8 +47,7 @@ test("upload to the API, play, ask, reload keeps it, delete removes it", async (
   await input.fill("how many cars in the first 30 seconds?");
   await input.press("Enter");
   const log = page.getByRole("log");
-  await expect(log).toContainText("I counted", { timeout: 15_000 });
-  await expect(log).toContainText("simulated");
+  await expect(log).toContainText(/I counted|I didn't find|analy[sz]ed/i, { timeout: 15_000 });
 
   // It survives a reload (the list is fetched from the API, not held in the tab).
   await page.reload();
@@ -70,4 +69,43 @@ test("an unreadable file is rejected with the server's reason", async ({ page })
   await page.locator("#video-file-input").setInputFiles(bad);
   await expect(page.getByText(/couldn't be read as a video/i)).toBeVisible({ timeout: 15_000 });
   expect(((await (await page.request.get(`${API}/v1/videos`)).json()) as unknown[]).length).toBe(0);
+});
+
+test("real model: counts from the stored tracks and draws boxes over the video", async ({ page }) => {
+  test.skip(process.env.E2E_YOLO !== "1", "needs the real detector: set E2E_YOLO=1");
+  test.setTimeout(240_000);
+  const file = path.resolve(__dirname, "../../../test_video/Test Video.mp4");
+  test.skip(!existsSync(file), "test_video/Test Video.mp4 is not present");
+
+  await page.goto("/");
+  await page.locator("#video-file-input").setInputFiles(file);
+  await expect(page.locator("#index-badge")).toContainText(/Analyzed · \d+ objects?/, {
+    timeout: 180_000,
+  });
+
+  // The answer comes from the tracks, not the simulator.
+  const input = page.getByLabel("Ask a question about the video");
+  await input.fill("how many cars in the first 30 seconds?");
+  await input.press("Enter");
+  const log = page.getByRole("log");
+  await expect(log).toContainText(/I counted \d+ cars?/, { timeout: 15_000 });
+  await expect(log).not.toContainText("simulated");
+
+  // Jump to a moment that has a detection and check that boxes get painted.
+  const id = (await (await page.request.get(`${API}/v1/videos`)).json())[0].id as string;
+  const d = await (await page.request.get(`${API}/v1/videos/${id}/detections?start=0&end=30`)).json();
+  const t = d.tracks[0].points[0][0] as number;
+  await page.locator("video").evaluate((v: HTMLVideoElement, at) => (v.currentTime = at), t);
+  const painted = () =>
+    page.getByTestId("detection-overlay").evaluate((c: HTMLCanvasElement) => {
+      const data = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
+      for (let i = 3; i < data.length; i += 4) if (data[i] > 0) return true;
+      return false;
+    });
+  await expect.poll(painted, { timeout: 10_000 }).toBe(true);
+  await page.screenshot({ path: "test-results/overlay.png" });
+
+  // The toggle hides them.
+  await page.locator("#player-boxes").click();
+  await expect(page.getByTestId("detection-overlay")).toHaveCount(0);
 });

@@ -44,7 +44,18 @@ Restart `npm run dev` after changing any `NEXT_PUBLIC_*` variable.
 After an upload the API starts analysing the video in the background (YOLO11 detection +
 ByteTrack tracking, set up per ml/README.md). The video panel shows `Analyzing 42%` and then
 `Analyzed · N objects`. The result is cached per video and rebuilt only when the settings change
-(or via the re-analyze button). Answers to questions are still simulated until P3-6.
+(or via the re-analyze button).
+
+Once a video is analyzed, questions are answered from the stored tracks, with no model run per
+question: counts are unique tracked objects (cars, trucks, buses, motorcycles, bicycles, people),
+over the question's time window ("between 0:10 and 0:40", "first 30 sec") or the range picked
+under the video. Anything the detector can't see (colors, helmets, trees...) gets an honest note
+instead of a made-up number. Built-in samples and videos not yet analyzed stay simulated or say so.
+The scan icon in the player toggles the detection boxes over the video.
+
+Measured on an RTX 4050 (6 GB), YOLO11s at 5 sampled fps: the 84 s 1280x720 test clip is analyzed
+in about 14 s (roughly 6x real time) and yields ~40 tracked vehicles. These counts have not yet
+been checked against a hand count.
 
 ### Checks
 ```
