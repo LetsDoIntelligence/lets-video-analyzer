@@ -131,7 +131,9 @@ def answer(session: Session, req: AnalyzeRequest) -> Reply:
             ChartBlock(title=f"{title} over time", data=histogram(times, win.start, win.end))
         )
     if count:
-        blocks.append(TimestampsBlock(label="Jump to first detections", times=times[:6]))
+        blocks.append(
+            TimestampsBlock(label="Jump to first detections", times=list(dict.fromkeys(times))[:6])
+        )
     if count and len(subject.classes) > 1:
         blocks.append(_by_type(tracks))
     if count and _WANTS_TABLE.search(req.question):

@@ -157,3 +157,17 @@ def test_detections_errors(client: TestClient, vid: str) -> None:
     assert client.get(url, params={"start": 5, "end": 5}).status_code == 422
     assert client.get(url, params={"start": 0, "end": 500}).status_code == 422
     assert client.get("/v1/videos/nope/detections").status_code == 404
+
+
+def test_timestamps_have_no_duplicates(client: TestClient, vid: str) -> None:
+    with client.app.state.session_factory() as s:  # type: ignore[attr-defined]
+        store.start_index(s, vid, {})
+        twins = [
+            make_track(1, "car", 10, 14),
+            make_track(2, "car", 10, 15),
+            make_track(3, "car", 20, 25),
+        ]
+        store.save_index(s, vid, tracks=twins, frames=100, width=64, height=48)
+    _, blocks = ask(client, vid, "How many cars?")
+    times = next(b["times"] for b in blocks if b["type"] == "timestamps")
+    assert len(times) == len(set(times)) == 2

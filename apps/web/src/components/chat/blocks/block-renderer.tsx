@@ -18,8 +18,8 @@ function TimestampRow({
   return (
     <div className="flex flex-wrap items-center gap-2">
       <span className="text-xs text-ink-3">{block.label}</span>
-      {block.times.map((t) => (
-        <TimeChip key={t} time={t} onSeek={seek} disabled={!canSeek} />
+      {block.times.map((t, i) => (
+        <TimeChip key={`${t}-${i}`} time={t} onSeek={seek} disabled={!canSeek} />
       ))}
     </div>
   );
