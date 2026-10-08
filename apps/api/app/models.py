@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, Enum, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import JSON, DateTime, Enum, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -33,6 +33,12 @@ class JobStatus(enum.StrEnum):
     succeeded = "succeeded"
     failed = "failed"
     cancelled = "cancelled"
+
+
+class IndexStatus(enum.StrEnum):
+    running = "running"
+    done = "done"
+    failed = "failed"
 
 
 class Video(Base):
@@ -77,3 +83,45 @@ class Job(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     video: Mapped[Video] = relationship(back_populates="jobs")
+
+
+class VideoIndex(Base):
+    """State of the detection/tracking index for one video (one row per video).
+
+    params records what produced the tracks (model, sampling rate, tracker settings), so an
+    index is reused only while those still match and rebuilt when they change.
+    """
+
+    __tablename__ = "video_indexes"
+
+    video_id: Mapped[str] = mapped_column(
+        ForeignKey("videos.id", ondelete="CASCADE"), primary_key=True
+    )
+    status: Mapped[IndexStatus] = mapped_column(
+        Enum(IndexStatus, native_enum=False, length=20), default=IndexStatus.running
+    )
+    params: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
+    frames: Mapped[int] = mapped_column(Integer, default=0)  # sampled frames processed
+    frame_width: Mapped[int | None] = mapped_column(Integer)
+    frame_height: Mapped[int | None] = mapped_column(Integer)
+    n_tracks: Mapped[int] = mapped_column(Integer, default=0)
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class TrackRecord(Base):
+    """One tracked object: what it is, when it was on screen, and where (sparse boxes)."""
+
+    __tablename__ = "tracks"
+    __table_args__ = (Index("ix_tracks_video_cls_tin", "video_id", "cls", "t_in"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    video_id: Mapped[str] = mapped_column(ForeignKey("videos.id", ondelete="CASCADE"))
+    track_no: Mapped[int] = mapped_column(Integer)  # id assigned by the tracker
+    cls: Mapped[str] = mapped_column(String(32))
+    t_in: Mapped[float] = mapped_column(Float)  # first seen (seconds)
+    t_out: Mapped[float] = mapped_column(Float)  # last seen (seconds)
+    confidence: Mapped[float] = mapped_column(Float)  # mean detection confidence
+    # [[t, x1, y1, x2, y2, conf], ...] in source pixels, one entry per sampled frame.
+    points: Mapped[list[list[float]]] = mapped_column(JSON)
