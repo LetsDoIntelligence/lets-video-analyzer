@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     # Placeholder indexing job: N progress steps, this long each (replaced in Phase 3).
     stub_job_steps: int = 10
     stub_job_step_ms: int = 300
+    # Detection (Phase 3). Weights are fetched by `python ml/tools/check_gpu.py`.
+    detect_weights: Path = API_ROOT.parent.parent / "ml" / "weights" / "yolo11s.pt"
+    detect_device: str = "auto"  # "auto" = GPU when available, else "cpu"
+    detect_fps: float = 5.0  # frames per second sampled for detection
+    detect_batch_size: int = 8
+    detect_conf: float = 0.25  # minimum detection confidence
 
 
 @lru_cache

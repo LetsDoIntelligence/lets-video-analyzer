@@ -64,3 +64,15 @@ def upload(client: TestClient, video_bytes: bytes):  # type: ignore[no-untyped-d
         return client.post("/v1/videos", files={"file": (name, io.BytesIO(body), ctype)})
 
     return _upload
+
+
+@pytest.fixture
+def make_video(tmp_path: Path):  # type: ignore[no-untyped-def]
+    """Factory: write a small real MP4 and return its path."""
+
+    def _make(seconds: int = 2, fps: int = 10, size: tuple[int, int] = (64, 48)) -> Path:
+        path = tmp_path / f"clip-{seconds}s-{fps}fps.mp4"
+        write_test_video(path, seconds=seconds, fps=fps, size=size)
+        return path
+
+    return _make
