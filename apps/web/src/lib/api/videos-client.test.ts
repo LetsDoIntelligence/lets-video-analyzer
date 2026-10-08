@@ -203,3 +203,28 @@ describe("analysis (index) status", () => {
     await expect(refused.reindex("x")).rejects.toThrow("Video not found.");
   });
 });
+
+describe("getDetections", () => {
+  it("asks for one window and parses the boxes", async () => {
+    let url = "";
+    const client = createVideosClient(BASE, async (u) => {
+      url = String(u);
+      return json({
+        videoId: "abc",
+        width: 1280,
+        height: 720,
+        start: 0,
+        end: 30,
+        tracks: [{ id: 1, cls: "car", points: [[1, 0, 0, 10, 10]] }],
+      });
+    });
+    const d = await client.getDetections("abc", 0, 30);
+    expect(url).toBe(`${BASE}/v1/videos/abc/detections?start=0&end=30`);
+    expect(d.tracks[0].cls).toBe("car");
+  });
+
+  it("fails clearly when the video isn't analysed", async () => {
+    const client = createVideosClient(BASE, async () => json({ detail: "x" }, 409));
+    await expect(client.getDetections("abc", 0, 30)).rejects.toMatchObject({ status: 409 });
+  });
+});

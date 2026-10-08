@@ -6,16 +6,19 @@ import {
   Pause,
   Play,
   RotateCcw,
+  ScanSearch,
   Volume2,
   VolumeX,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { DetectionOverlay } from "@/components/video/detection-overlay";
 import { RangeTimeline } from "@/components/video/range-timeline";
 import { TimeField } from "@/components/video/time-field";
 import { Button } from "@/components/ui/button";
 import { formatTimecode, isFullRange, withEnd, withStart } from "@/lib/range";
 import { formatDuration, type VideoItem } from "@/lib/videos";
 import { useAnalysisStore } from "@/store/analysis-store";
+import { useVideoStore } from "@/store/video-store";
 
 const RATES = [1, 1.5, 2, 0.5];
 
@@ -28,6 +31,8 @@ export function VideoPlayer({ video }: { video: VideoItem }) {
   const [muted, setMuted] = useState(false);
   const [rate, setRate] = useState(1);
   const [elDuration, setElDuration] = useState<number>();
+  const [showBoxes, setShowBoxes] = useState(true);
+  const analysed = useVideoStore((s) => s.indexes[video.id]?.state === "ready");
 
   const currentTime = useAnalysisStore((s) => s.currentTime);
   const setCurrentTime = useAnalysisStore((s) => s.setCurrentTime);
@@ -176,6 +181,10 @@ export function VideoPlayer({ video }: { video: VideoItem }) {
           </div>
         )}
 
+        {hasSrc && analysed && showBoxes && (
+          <DetectionOverlay videoId={video.id} currentTime={currentTime} duration={duration} />
+        )}
+
         {hasSrc && !playing && (
           <button
             type="button"
@@ -269,6 +278,20 @@ export function VideoPlayer({ video }: { video: VideoItem }) {
           >
             {rate}×
           </Button>
+          {analysed && (
+            <Button
+              variant="ghost"
+              size="icon"
+              id="player-boxes"
+              onClick={() => setShowBoxes((b) => !b)}
+              aria-pressed={showBoxes}
+              aria-label="Show detections"
+              title={showBoxes ? "Hide detections" : "Show detections"}
+              className={showBoxes ? "text-accent" : undefined}
+            >
+              <ScanSearch className="size-4" />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"

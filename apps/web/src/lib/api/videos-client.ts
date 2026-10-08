@@ -63,6 +63,17 @@ async function errorMessage(res: Response, fallback: string): Promise<string> {
   return fallback;
 }
 
+/** Tracked boxes inside a time window, for the video overlay. */
+const apiDetectionsSchema = z.object({
+  width: z.number(),
+  height: z.number(),
+  tracks: z.array(
+    z.object({ id: z.number(), cls: z.string(), points: z.array(z.array(z.number())) }),
+  ),
+});
+
+export type Detections = z.infer<typeof apiDetectionsSchema>;
+
 export interface VideosClient {
   list(): Promise<VideoItem[]>;
   upload(file: File, onProgress?: (fraction: number) => void): Promise<VideoItem>;
@@ -71,6 +82,8 @@ export interface VideosClient {
   getIndex(id: string): Promise<IndexStatus>;
   /** Start (or re-run, rebuilding from scratch) the analysis of one video. */
   reindex(id: string): Promise<void>;
+  /** Boxes between start and end seconds (at most two minutes per call). */
+  getDetections(id: string, start: number, end: number): Promise<Detections>;
 }
 
 export function createVideosClient(
@@ -152,6 +165,19 @@ export function createVideosClient(
       }
       if (!res.ok) throw new VideoApiError("Couldn't check the analysis.", res.status);
       return apiIndexSchema.parse(await res.json());
+    },
+
+    async getDetections(id, start, end) {
+      let res: Response;
+      try {
+        res = await fetchImpl(
+          `${baseUrl}/v1/videos/${encodeURIComponent(id)}/detections?start=${start}&end=${end}`,
+        );
+      } catch {
+        throw network();
+      }
+      if (!res.ok) throw new VideoApiError("Couldn't load the detections.", res.status);
+      return apiDetectionsSchema.parse(await res.json());
     },
 
     async reindex(id) {

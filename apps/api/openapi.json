@@ -34,6 +34,48 @@
         "title": "Body_upload_video_v1_videos_post",
         "type": "object"
       },
+      "DetectionsOut": {
+        "description": "Tracked boxes inside a time window, for drawing over the video.",
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "number"
+          },
+          "height": {
+            "title": "Height",
+            "type": "integer"
+          },
+          "start": {
+            "title": "Start",
+            "type": "number"
+          },
+          "tracks": {
+            "items": {
+              "$ref": "#/components/schemas/OverlayTrack"
+            },
+            "title": "Tracks",
+            "type": "array"
+          },
+          "videoId": {
+            "title": "Videoid",
+            "type": "string"
+          },
+          "width": {
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "videoId",
+          "width",
+          "height",
+          "start",
+          "end",
+          "tracks"
+        ],
+        "title": "DetectionsOut",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -239,6 +281,35 @@
         ],
         "title": "JobStatus",
         "type": "string"
+      },
+      "OverlayTrack": {
+        "properties": {
+          "cls": {
+            "title": "Cls",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "points": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Points",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "cls",
+          "points"
+        ],
+        "title": "OverlayTrack",
+        "type": "object"
       },
       "ScopeInfo": {
         "properties": {
@@ -454,7 +525,7 @@
   "paths": {
     "/v1/analyze": {
       "post": {
-        "description": "Answer a question about a video as a Server-Sent Events stream.\n\nCurrently simulated (see app/analysis/mock.py); the contract is final.",
+        "description": "Answer a question about a video as a Server-Sent Events stream.\n\nUploaded videos are answered from their detection/tracking index (app/analysis/engine.py);\nbuilt-in sample videos have no footage and get simulated answers (app/analysis/mock.py).",
         "operationId": "analyze_v1_analyze_post",
         "requestBody": {
           "content": {
@@ -776,6 +847,71 @@
         "summary": "Get Video",
         "tags": [
           "videos"
+        ]
+      }
+    },
+    "/v1/videos/{video_id}/detections": {
+      "get": {
+        "description": "Tracked boxes between start and end seconds (at most two minutes per call).",
+        "operationId": "get_detections_v1_videos__video_id__detections_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "video_id",
+            "required": true,
+            "schema": {
+              "title": "Video Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "start",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Start",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "minimum": 0,
+              "title": "End",
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectionsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Detections",
+        "tags": [
+          "index"
         ]
       }
     },

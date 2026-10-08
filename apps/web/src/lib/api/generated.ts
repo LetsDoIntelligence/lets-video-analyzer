@@ -17,7 +17,8 @@ export interface paths {
          * Analyze
          * @description Answer a question about a video as a Server-Sent Events stream.
          *
-         *     Currently simulated (see app/analysis/mock.py); the contract is final.
+         *     Uploaded videos are answered from their detection/tracking index (app/analysis/engine.py);
+         *     built-in sample videos have no footage and get simulated answers (app/analysis/mock.py).
          */
         post: operations["analyze_v1_analyze_post"];
         delete?: never;
@@ -139,6 +140,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/videos/{video_id}/detections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Detections
+         * @description Tracked boxes between start and end seconds (at most two minutes per call).
+         */
+        get: operations["get_detections_v1_videos__video_id__detections_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/videos/{video_id}/file": {
         parameters: {
             query?: never;
@@ -232,6 +253,24 @@ export interface components {
             /** File */
             file: string;
         };
+        /**
+         * DetectionsOut
+         * @description Tracked boxes inside a time window, for drawing over the video.
+         */
+        DetectionsOut: {
+            /** End */
+            end: number;
+            /** Height */
+            height: number;
+            /** Start */
+            start: number;
+            /** Tracks */
+            tracks: components["schemas"]["OverlayTrack"][];
+            /** Videoid */
+            videoId: string;
+            /** Width */
+            width: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -310,6 +349,15 @@ export interface components {
          * @enum {string}
          */
         JobStatus: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+        /** OverlayTrack */
+        OverlayTrack: {
+            /** Cls */
+            cls: string;
+            /** Id */
+            id: number;
+            /** Points */
+            points: number[][];
+        };
         /** ScopeInfo */
         ScopeInfo: {
             /** Duration */
@@ -633,6 +681,40 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_detections_v1_videos__video_id__detections_get: {
+        parameters: {
+            query?: {
+                start?: number;
+                end?: number;
+            };
+            header?: never;
+            path: {
+                video_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DetectionsOut"];
+                };
             };
             /** @description Validation Error */
             422: {

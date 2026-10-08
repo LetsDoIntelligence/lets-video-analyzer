@@ -74,3 +74,20 @@ class IndexOut(CamelModel):
     job_id: str | None = None
     n_tracks: int | None = None
     error: str | None = None
+
+
+class OverlayTrack(CamelModel):
+    id: int
+    cls: str
+    points: list[list[float]]  # [t, x1, y1, x2, y2] in source pixels
+
+
+class DetectionsOut(CamelModel):
+    """Tracked boxes inside a time window, for drawing over the video."""
+
+    video_id: str
+    width: int
+    height: int
+    start: float
+    end: float
+    tracks: list[OverlayTrack]

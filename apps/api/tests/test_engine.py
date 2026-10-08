@@ -137,3 +137,23 @@ def test_unknown_video_still_simulated(client: TestClient) -> None:
     text, blocks = ask(client, "nope", "How many cars?")
     assert "simulated" in text
     assert blocks
+
+
+def test_detections_window(client: TestClient, vid: str) -> None:
+    seed(client, vid)
+    res = client.get(f"/v1/videos/{vid}/detections", params={"start": 9, "end": 13})
+    assert res.status_code == 200
+    body = res.json()
+    assert (body["width"], body["height"]) == (64, 48)
+    by_id = {t["id"]: t for t in body["tracks"]}
+    assert set(by_id) == {2, 4, 5}  # cars #2, truck #4 and the person (ends at 9)
+    assert all(9 <= p[0] <= 13 and len(p) == 5 for t in body["tracks"] for p in t["points"])
+
+
+def test_detections_errors(client: TestClient, vid: str) -> None:
+    url = f"/v1/videos/{vid}/detections"
+    assert client.get(url).status_code == 409  # not analyzed
+    seed(client, vid)
+    assert client.get(url, params={"start": 5, "end": 5}).status_code == 422
+    assert client.get(url, params={"start": 0, "end": 500}).status_code == 422
+    assert client.get("/v1/videos/nope/detections").status_code == 404
