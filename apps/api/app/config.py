@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -23,9 +24,12 @@ class Settings(BaseSettings):
     # Simulated latency for the stub analyzer (set to 0 in tests).
     analyze_think_ms: int = 700
     analyze_token_ms: int = 30
-    # Placeholder indexing job: N progress steps, this long each (replaced in Phase 3).
+    # Placeholder indexing job (indexing="stub"): N progress steps, this long each.
     stub_job_steps: int = 10
     stub_job_step_ms: int = 300
+    # "yolo" = real detection + tracking; "stub" = fake progress only (no GPU/model needed).
+    indexing: Literal["yolo", "stub"] = "yolo"
+    auto_index: bool = True  # start indexing right after a video is uploaded
     # Detection (Phase 3). Weights are fetched by `python ml/tools/check_gpu.py`.
     detect_weights: Path = API_ROOT.parent.parent / "ml" / "weights" / "yolo11s.pt"
     detect_device: str = "auto"  # "auto" = GPU when available, else "cpu"

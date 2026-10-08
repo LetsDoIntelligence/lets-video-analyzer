@@ -159,6 +159,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/videos/{video_id}/index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Video Index
+         * @description Whether the video's objects have been detected and tracked yet, and how far along.
+         */
+        get: operations["get_video_index_v1_videos__video_id__index_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/videos/{video_id}/jobs": {
         parameters: {
             query?: never;
@@ -224,8 +244,38 @@ export interface components {
             /** Version */
             version: string;
         };
+        /**
+         * IndexOut
+         * @description Where a video stands in detection + tracking, for the UI.
+         */
+        IndexOut: {
+            /** Error */
+            error?: string | null;
+            /** Jobid */
+            jobId?: string | null;
+            /** Ntracks */
+            nTracks?: number | null;
+            /**
+             * Progress
+             * @default 0
+             */
+            progress: number;
+            state: components["schemas"]["IndexState"];
+            /** Videoid */
+            videoId: string;
+        };
+        /**
+         * IndexState
+         * @enum {string}
+         */
+        IndexState: "none" | "queued" | "running" | "ready" | "failed";
         /** JobCreate */
         JobCreate: {
+            /**
+             * Force
+             * @default false
+             */
+            force: boolean;
             kind: components["schemas"]["JobKind"];
         };
         /**
@@ -613,6 +663,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_video_index_v1_videos__video_id__index_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                video_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IndexOut"];
                 };
             };
             /** @description Validation Error */

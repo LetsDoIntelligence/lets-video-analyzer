@@ -12,7 +12,7 @@ from app.config import Settings
 from app.db import get_session
 from app.jobs.runner import ACTIVE, JobRunner
 from app.media import MediaError, make_thumbnail, probe
-from app.models import Video, VideoStatus
+from app.models import JobKind, Video, VideoStatus
 from app.schemas import VideoOut
 from app.storage import (
     StorageError,
@@ -45,7 +45,9 @@ def _get_or_404(session: Session, video_id: str) -> Video:
 
 
 @router.post("", response_model=VideoOut, status_code=status.HTTP_201_CREATED)
-async def upload_video(file: UploadFile, session: SessionDep, settings: SettingsDep) -> Video:
+async def upload_video(
+    file: UploadFile, request: Request, session: SessionDep, settings: SettingsDep
+) -> Video:
     """Store an uploaded video and register it."""
     try:
         ext = validate_upload(file)
@@ -93,6 +95,9 @@ async def upload_video(file: UploadFile, session: SessionDep, settings: Settings
     )
     session.add(video)
     session.commit()
+    if settings.auto_index:
+        runner: JobRunner = request.app.state.jobs
+        runner.submit(video.id, JobKind.indexing)  # detection + tracking runs in the background
     return video
 
 

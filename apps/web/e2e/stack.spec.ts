@@ -30,6 +30,13 @@ test("upload to the API, play, ask, reload keeps it, delete removes it", async (
   await expect(page.locator("#video-select")).toContainText("synthetic-traffic", { timeout: 20_000 });
   await expect(page.getByLabel("Ask a question about the video")).toBeEnabled();
 
+  // The server analyses the upload in the background and the toolbar badge follows it.
+  const badge = page.locator("#index-badge");
+  await expect(badge).toBeVisible();
+  await expect(badge).not.toContainText(/Queued|Analyzing/, { timeout: 90_000 });
+  // With the real model (E2E_YOLO=1) it must finish successfully and report what it found.
+  if (process.env.E2E_YOLO === "1") await expect(badge).toContainText(/Analyzed · \d+ objects?/);
+
   // Playback comes from the API's Range-streaming endpoint.
   const src = await page.locator("video").getAttribute("src");
   expect(src).toContain(`${API}/v1/videos/`);

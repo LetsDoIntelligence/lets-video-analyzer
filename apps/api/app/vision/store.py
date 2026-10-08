@@ -22,6 +22,14 @@ def get_index(session: Session, video_id: str) -> VideoIndex | None:
     return session.get(VideoIndex, video_id)
 
 
+def invalidate(session: Session, video_id: str) -> None:
+    """Forget the index entirely (tracks and state), forcing a rebuild on the next job."""
+    session.execute(delete(TrackRecord).where(TrackRecord.video_id == video_id))
+    session.execute(delete(VideoIndex).where(VideoIndex.video_id == video_id))
+    session.commit()
+    session.expire_all()  # bulk deletes bypass the identity map; don't serve stale rows
+
+
 def is_current(session: Session, video_id: str, params: dict[str, object]) -> bool:
     """True when the video already has a finished index built with exactly these params."""
     index = get_index(session, video_id)

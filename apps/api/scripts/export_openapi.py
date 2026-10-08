@@ -1,6 +1,6 @@
 """Write the OpenAPI schema to apps/api/openapi.json (the web client's types are generated from it).
 
-    python scripts/export_openapi.py
+python scripts/export_openapi.py
 """
 
 import json

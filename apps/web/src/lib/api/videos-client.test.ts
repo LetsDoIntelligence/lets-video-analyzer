@@ -3,8 +3,10 @@ import type { components } from "@/lib/api/generated";
 import {
   VideoApiError,
   createVideosClient,
+  isIndexing,
   toVideoItem,
   type ApiVideo,
+  type IndexStatus,
 } from "@/lib/api/videos-client";
 
 const BASE = "http://api.test";
@@ -150,5 +152,54 @@ describe("upload", () => {
       }),
     );
     await expect(garbled.upload(file)).rejects.toThrow(/unexpected response/);
+  });
+});
+
+describe("analysis (index) status", () => {
+  it("backend IndexOut stays compatible with what the client reads", () => {
+    expectTypeOf<components["schemas"]["IndexOut"]>().toExtend<IndexStatus>();
+  });
+
+  it("reads the state and treats queued/running as in progress", async () => {
+    const client = createVideosClient(BASE, (async (url: string) => {
+      expect(url).toBe("http://api.test/v1/videos/a%20b/index");
+      return json({ videoId: "a b", state: "running", progress: 0.4, jobId: "j", nTracks: null });
+    }) as typeof fetch);
+    const status = await client.getIndex("a b");
+    expect(status).toMatchObject({ state: "running", progress: 0.4 });
+    expect(isIndexing(status)).toBe(true);
+    expect(isIndexing({ state: "queued", progress: 0 })).toBe(true);
+    expect(isIndexing({ state: "ready", progress: 1 })).toBe(false);
+    expect(isIndexing(undefined)).toBe(false);
+  });
+
+  it("rejects a response it does not understand", async () => {
+    const client = createVideosClient(BASE, (async () => json({ state: "bogus" })) as typeof fetch);
+    await expect(client.getIndex("x")).rejects.toThrow();
+  });
+
+  it("reports a missing server and server errors", async () => {
+    const down = createVideosClient(BASE, (async () => {
+      throw new TypeError("fetch failed");
+    }) as typeof fetch);
+    await expect(down.getIndex("x")).rejects.toThrow(/Is the API running/);
+    const gone = createVideosClient(BASE, (async () => json({}, 404)) as typeof fetch);
+    await expect(gone.getIndex("x")).rejects.toBeInstanceOf(VideoApiError);
+  });
+
+  it("re-analyzes by forcing an indexing job", async () => {
+    const seen: { url: string; init?: RequestInit }[] = [];
+    const client = createVideosClient(BASE, (async (url: string, init?: RequestInit) => {
+      seen.push({ url, init });
+      return json({ id: "job" }, 202);
+    }) as typeof fetch);
+    await client.reindex("abc");
+    expect(seen[0].url).toBe("http://api.test/v1/videos/abc/jobs");
+    expect(seen[0].init?.method).toBe("POST");
+    expect(JSON.parse(String(seen[0].init?.body))).toEqual({ kind: "indexing", force: true });
+
+    const refused = createVideosClient(BASE, (async () =>
+      json({ detail: "Video not found." }, 404)) as typeof fetch);
+    await expect(refused.reindex("x")).rejects.toThrow("Video not found.");
   });
 });

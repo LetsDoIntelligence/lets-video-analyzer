@@ -41,8 +41,10 @@ cd apps/web
 npm run dev
 ```
 Restart `npm run dev` after changing any `NEXT_PUBLIC_*` variable.
-Analysis answers are still simulated until Phase 3 (detection) lands; uploads, thumbnails,
-playback and jobs are real.
+After an upload the API starts analysing the video in the background (YOLO11 detection +
+ByteTrack tracking, set up per ml/README.md). The video panel shows `Analyzing 42%` and then
+`Analyzed · N objects`. The result is cached per video and rebuilt only when the settings change
+(or via the re-analyze button). Answers to questions are still simulated until P3-6.
 
 ### Checks
 ```

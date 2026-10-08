@@ -1,12 +1,7 @@
 import { create } from "zustand";
 import { env } from "@/lib/env";
-import { videosClient } from "@/lib/api/videos-client";
-import {
-  SAMPLE_VIDEOS,
-  readVideoDuration,
-  validateVideoFile,
-  type VideoItem,
-} from "@/lib/videos";
+import { videosClient, type IndexStatus } from "@/lib/api/videos-client";
+import { SAMPLE_VIDEOS, readVideoDuration, validateVideoFile, type VideoItem } from "@/lib/videos";
 
 interface VideoState {
   videos: VideoItem[];
@@ -16,10 +11,16 @@ interface VideoState {
   /** 0..1 while a file is uploading to the API, otherwise null. */
   uploadProgress: number | null;
   uploadError: string | null;
+  /** Server-side analysis (detection + tracking) per uploaded video; API mode only. */
+  indexes: Record<string, IndexStatus>;
   load: () => Promise<void>;
   select: (id: string | null) => void;
   upload: (file: File) => Promise<void>;
   remove: (id: string) => Promise<void>;
+  /** Fetch the latest analysis state of a video; returns null if the server can't be reached. */
+  refreshIndex: (id: string) => Promise<IndexStatus | null>;
+  /** (Re)run the analysis from scratch. */
+  reindex: (id: string) => Promise<void>;
   clearError: () => void;
 }
 
@@ -34,6 +35,7 @@ export const useVideoStore = create<VideoState>((set, get) => ({
   selectedId: null,
   loading: false,
   uploadProgress: null,
+  indexes: {},
   uploadError: null,
 
   load: async () => {
@@ -106,10 +108,38 @@ export const useVideoStore = create<VideoState>((set, get) => ({
         return;
       }
     }
-    set((s) => ({
-      videos: s.videos.filter((v) => v.id !== id),
-      selectedId: s.selectedId === id ? null : s.selectedId,
-    }));
+    set((s) => {
+      const indexes = { ...s.indexes };
+      delete indexes[id];
+      return {
+        videos: s.videos.filter((v) => v.id !== id),
+        selectedId: s.selectedId === id ? null : s.selectedId,
+        indexes,
+      };
+    });
+  },
+
+  refreshIndex: async (id) => {
+    if (env.useMocks) return null;
+    try {
+      const status = await videosClient.getIndex(id);
+      set((s) => ({ indexes: { ...s.indexes, [id]: status } }));
+      return status;
+    } catch {
+      return null; // the caller decides whether to retry
+    }
+  },
+
+  reindex: async (id) => {
+    if (env.useMocks) return;
+    // Show it as started right away; polling takes over from here.
+    set((s) => ({ indexes: { ...s.indexes, [id]: { state: "queued", progress: 0 } } }));
+    try {
+      await videosClient.reindex(id);
+    } catch (e) {
+      set({ uploadError: message(e, "Couldn't start the analysis.") });
+      await get().refreshIndex(id);
+    }
   },
 
   clearError: () => set({ uploadError: null }),

@@ -10,7 +10,7 @@ from app.config import Settings, get_settings
 from app.db import make_engine, make_session_factory, run_migrations
 from app.jobs.handlers import default_handlers
 from app.jobs.runner import JobRunner
-from app.routers import analyze, health, jobs, videos
+from app.routers import analyze, health, index, jobs, videos
 
 logger = logging.getLogger("lets.api")
 
@@ -27,7 +27,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.session_factory = make_session_factory(engine)
         runner = JobRunner(
             app.state.session_factory,
-            default_handlers(settings.stub_job_steps, settings.stub_job_step_ms),
+            default_handlers(settings, app.state.session_factory),
         )
         if stale := runner.recover():
             logger.warning("Marked %d interrupted job(s) as failed", stale)
@@ -53,6 +53,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(videos.router, prefix="/v1")
     app.include_router(analyze.router, prefix="/v1")
     app.include_router(jobs.router, prefix="/v1")
+    app.include_router(index.router, prefix="/v1")
     return app
 
 

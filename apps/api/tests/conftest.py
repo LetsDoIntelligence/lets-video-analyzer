@@ -46,6 +46,8 @@ def settings(tmp_path) -> Settings:  # type: ignore[no-untyped-def]
         analyze_token_ms=0,
         stub_job_steps=5,
         stub_job_step_ms=0,
+        indexing="stub",  # no model needed; real indexing is tested in test_indexing.py
+        auto_index=False,  # tests start jobs explicitly
     )
 
 

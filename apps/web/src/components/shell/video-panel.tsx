@@ -2,6 +2,7 @@
 
 import { ChevronUp, Trash2 } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { IndexBadge } from "@/components/video/index-badge";
 import { ScopeBadge } from "@/components/video/scope-badge";
 import { VideoSelector } from "@/components/video/video-selector";
 import { VideoStage } from "@/components/video/video-stage";
@@ -60,6 +61,7 @@ export function VideoPanel() {
             Video
           </h2>
           <ScopeBadge />
+          <IndexBadge />
         </div>
         <div className="flex items-center gap-2">
           <VideoSelector onUploadClick={browse} />

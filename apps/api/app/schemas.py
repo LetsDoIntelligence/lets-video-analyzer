@@ -1,3 +1,4 @@
+import enum
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
@@ -52,3 +53,24 @@ class JobOut(CamelModel):
 
 class JobCreate(CamelModel):
     kind: JobKind
+    # Rebuild the index even if one exists for the current settings (indexing jobs only).
+    force: bool = False
+
+
+class IndexState(enum.StrEnum):
+    none = "none"  # never indexed
+    queued = "queued"
+    running = "running"
+    ready = "ready"
+    failed = "failed"
+
+
+class IndexOut(CamelModel):
+    """Where a video stands in detection + tracking, for the UI."""
+
+    video_id: str
+    state: IndexState
+    progress: float = 0.0  # 0..1 while queued/running, 1 when ready
+    job_id: str | None = None
+    n_tracks: int | None = None
+    error: str | None = None

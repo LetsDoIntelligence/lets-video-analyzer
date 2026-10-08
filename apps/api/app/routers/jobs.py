@@ -10,8 +10,9 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.db import get_session
 from app.jobs.runner import ACTIVE, JobRunner
-from app.models import Job, Video
+from app.models import Job, JobKind, Video
 from app.schemas import JobCreate, JobOut
+from app.vision import store
 
 router = APIRouter(tags=["jobs"])
 
@@ -46,6 +47,14 @@ def start_job(
     """Start a job for a video. If one of that kind is already running, it is returned (200)."""
     if session.get(Video, video_id) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Video not found.")
+    if body.force and body.kind == JobKind.indexing:
+        busy = session.scalars(
+            select(Job).where(
+                Job.video_id == video_id, Job.kind == body.kind, Job.status.in_(ACTIVE)
+            )
+        ).first()
+        if busy is None:  # never wipe an index that is being rebuilt right now
+            store.invalidate(session, video_id)
     try:
         job, created = runner.submit(video_id, body.kind)
     except ValueError as e:

@@ -65,8 +65,80 @@
         "title": "Health",
         "type": "object"
       },
+      "IndexOut": {
+        "description": "Where a video stands in detection + tracking, for the UI.",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "jobId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jobid"
+          },
+          "nTracks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ntracks"
+          },
+          "progress": {
+            "default": 0.0,
+            "title": "Progress",
+            "type": "number"
+          },
+          "state": {
+            "$ref": "#/components/schemas/IndexState"
+          },
+          "videoId": {
+            "title": "Videoid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "videoId",
+          "state"
+        ],
+        "title": "IndexOut",
+        "type": "object"
+      },
+      "IndexState": {
+        "enum": [
+          "none",
+          "queued",
+          "running",
+          "ready",
+          "failed"
+        ],
+        "title": "IndexState",
+        "type": "string"
+      },
       "JobCreate": {
         "properties": {
+          "force": {
+            "default": false,
+            "title": "Force",
+            "type": "boolean"
+          },
           "kind": {
             "$ref": "#/components/schemas/JobKind"
           }
@@ -745,6 +817,49 @@
         "summary": "Stream Video",
         "tags": [
           "videos"
+        ]
+      }
+    },
+    "/v1/videos/{video_id}/index": {
+      "get": {
+        "description": "Whether the video's objects have been detected and tracked yet, and how far along.",
+        "operationId": "get_video_index_v1_videos__video_id__index_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "video_id",
+            "required": true,
+            "schema": {
+              "title": "Video Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IndexOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Video Index",
+        "tags": [
+          "index"
         ]
       }
     },

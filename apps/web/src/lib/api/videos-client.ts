@@ -24,6 +24,20 @@ const apiVideoSchema = z.object({
 
 export type ApiVideo = z.infer<typeof apiVideoSchema>;
 
+/** Where a video stands in detection + tracking ("analysis" in the UI). */
+const apiIndexSchema = z.object({
+  state: z.enum(["none", "queued", "running", "ready", "failed"]),
+  progress: z.number(),
+  nTracks: z.number().nullable().optional(),
+  error: z.string().nullable().optional(),
+});
+
+export type IndexStatus = z.infer<typeof apiIndexSchema>;
+
+/** True while the server is still working on it. */
+export const isIndexing = (s: IndexStatus | undefined): boolean =>
+  s?.state === "queued" || s?.state === "running";
+
 /** Map a backend video to the UI's model, making media URLs absolute. */
 export function toVideoItem(v: ApiVideo, baseUrl: string): VideoItem {
   return {
@@ -53,6 +67,10 @@ export interface VideosClient {
   list(): Promise<VideoItem[]>;
   upload(file: File, onProgress?: (fraction: number) => void): Promise<VideoItem>;
   remove(id: string): Promise<void>;
+  /** Analysis state of one video. */
+  getIndex(id: string): Promise<IndexStatus>;
+  /** Start (or re-run, rebuilding from scratch) the analysis of one video. */
+  reindex(id: string): Promise<void>;
 }
 
 export function createVideosClient(
@@ -113,13 +131,45 @@ export function createVideosClient(
     async remove(id) {
       let res: Response;
       try {
-        res = await fetchImpl(`${baseUrl}/v1/videos/${encodeURIComponent(id)}`, { method: "DELETE" });
+        res = await fetchImpl(`${baseUrl}/v1/videos/${encodeURIComponent(id)}`, {
+          method: "DELETE",
+        });
       } catch {
         throw network();
       }
       // 404 means it's already gone, which is what the caller wanted.
       if (!res.ok && res.status !== 404) {
         throw new VideoApiError(await errorMessage(res, "Couldn't remove the video."), res.status);
+      }
+    },
+
+    async getIndex(id) {
+      let res: Response;
+      try {
+        res = await fetchImpl(`${baseUrl}/v1/videos/${encodeURIComponent(id)}/index`);
+      } catch {
+        throw network();
+      }
+      if (!res.ok) throw new VideoApiError("Couldn't check the analysis.", res.status);
+      return apiIndexSchema.parse(await res.json());
+    },
+
+    async reindex(id) {
+      let res: Response;
+      try {
+        res = await fetchImpl(`${baseUrl}/v1/videos/${encodeURIComponent(id)}/jobs`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind: "indexing", force: true }),
+        });
+      } catch {
+        throw network();
+      }
+      if (!res.ok) {
+        throw new VideoApiError(
+          await errorMessage(res, "Couldn't start the analysis."),
+          res.status,
+        );
       }
     },
   };

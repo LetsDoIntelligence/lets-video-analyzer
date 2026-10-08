@@ -5,6 +5,9 @@ services:
       - "8000:8000"
     environment:
       LETS_CORS_ORIGINS: '["http://localhost:3000"]'
+      # The API image has no PyTorch/model weights yet (a GPU image is a Phase 3 follow-up),
+      # so don't start analysis on upload. Run the API locally for real detection.
+      LETS_AUTO_INDEX: "false"
     volumes:
       - lets-data:/data
     restart: unless-stopped
