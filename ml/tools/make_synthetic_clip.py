@@ -6,8 +6,8 @@ and range selector before the lead supplies real videos.
 Usage: python ml/tools/make_synthetic_clip.py
 """
 
-from pathlib import Path
 import random
+from pathlib import Path
 
 import imageio.v2 as imageio
 import numpy as np
