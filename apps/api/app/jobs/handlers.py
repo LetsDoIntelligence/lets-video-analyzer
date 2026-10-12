@@ -13,6 +13,7 @@ from app.models import JobKind, Video
 from app.storage import resolve_inside
 from app.vision import store
 from app.vision.attributes import AttributeExtractor, run_extractors
+from app.vision.color import ColorExtractor
 from app.vision.detector import Detector, YoloDetector
 from app.vision.pipeline import DetectionCancelled, detect_video
 from app.vision.tracker import Tracker, TrackerConfig
@@ -131,11 +132,16 @@ def make_indexing_handler(
     return handler
 
 
+def default_extractors(settings: Settings) -> list[AttributeExtractor]:
+    """The attribute extractors a normal (non-test) indexing job runs."""
+    return [ColorExtractor(settings.detect_fps)] if settings.extract_color else []
+
+
 def default_handlers(
     settings: Settings,
     sessions: sessionmaker[Session],
     detector_factory: DetectorFactory | None = None,
-    extractors: Sequence[AttributeExtractor] = (),
+    extractors: Sequence[AttributeExtractor] | None = None,
 ) -> dict[JobKind, Handler]:
     if settings.indexing == "stub":
         return {
@@ -145,6 +151,9 @@ def default_handlers(
         }
     return {
         JobKind.indexing: make_indexing_handler(
-            settings, sessions, detector_factory, extractors=extractors
+            settings,
+            sessions,
+            detector_factory,
+            extractors=default_extractors(settings) if extractors is None else extractors,
         )
     }

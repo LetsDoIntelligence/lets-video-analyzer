@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     detect_fps: float = 5.0  # frames per second sampled for detection
     detect_batch_size: int = 8
     detect_conf: float = 0.25  # minimum detection confidence
+    extract_color: bool = True  # name each vehicle's color while indexing (local, cheap)
 
 
 @lru_cache
