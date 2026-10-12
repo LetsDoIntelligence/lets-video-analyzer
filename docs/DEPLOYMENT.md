@@ -26,9 +26,9 @@ Paste into the `server { listen 443 ... }` block of letsdointelligence.ai, **bef
     location = /videoanalyzer {
         return 301 /videoanalyzer/;
     }
-    # API: /videoanalyzer/api/x -> /v1/x. Large uploads, SSE job events, video range requests.
+    # API: /videoanalyzer/api/v1/x -> /v1/x (the app already sends /v1). Large uploads, SSE job events, video range requests.
     location ^~ /videoanalyzer/api/ {
-        rewrite ^/videoanalyzer/api/(.*) /v1/$1 break;
+        rewrite ^/videoanalyzer/api/(.*) /$1 break;
         proxy_pass http://127.0.0.1:8045;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
