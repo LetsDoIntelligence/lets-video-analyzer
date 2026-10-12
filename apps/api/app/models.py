@@ -125,3 +125,5 @@ class TrackRecord(Base):
     confidence: Mapped[float] = mapped_column(Float)  # mean detection confidence
     # [[t, x1, y1, x2, y2, conf], ...] in source pixels, one entry per sampled frame.
     points: Mapped[list[list[float]]] = mapped_column(JSON)
+    # Extracted properties, e.g. {"color": "red"}. Filled by the attribute extractors.
+    attrs: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)

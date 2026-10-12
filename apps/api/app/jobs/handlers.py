@@ -3,7 +3,7 @@
 import logging
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -12,6 +12,7 @@ from app.jobs.runner import Handler, JobCancelled, JobContext
 from app.models import JobKind, Video
 from app.storage import resolve_inside
 from app.vision import store
+from app.vision.attributes import AttributeExtractor, run_extractors
 from app.vision.detector import Detector, YoloDetector
 from app.vision.pipeline import DetectionCancelled, detect_video
 from app.vision.tracker import Tracker, TrackerConfig
@@ -53,6 +54,7 @@ def make_indexing_handler(
     sessions: sessionmaker[Session],
     detector_factory: DetectorFactory | None = None,
     tracker_config: TrackerConfig | None = None,
+    extractors: Sequence[AttributeExtractor] = (),
 ) -> Handler:
     """Detect and track every object in a video, then store the tracks (see app.vision).
 
@@ -72,6 +74,7 @@ def make_indexing_handler(
         sample_fps=settings.detect_fps,
         conf=settings.detect_conf,
         tracker=tracker_config,
+        attributes=[e.name for e in extractors],
     )
 
     def handler(ctx: JobContext) -> None:
@@ -106,6 +109,11 @@ def make_indexing_handler(
                         last_reported = progress
                 ctx.checkpoint()
                 tracks = tracker.finish()
+                failed = run_extractors(
+                    extractors, path, tracks, should_cancel=lambda: ctx.cancelled
+                )
+                if failed:
+                    logger.warning("video %s: attributes missing (%s)", ctx.video_id, failed)
                 store.save_index(
                     session, ctx.video_id, tracks=tracks, frames=frames, width=width, height=height
                 )
@@ -127,6 +135,7 @@ def default_handlers(
     settings: Settings,
     sessions: sessionmaker[Session],
     detector_factory: DetectorFactory | None = None,
+    extractors: Sequence[AttributeExtractor] = (),
 ) -> dict[JobKind, Handler]:
     if settings.indexing == "stub":
         return {
@@ -134,4 +143,8 @@ def default_handlers(
                 settings.stub_job_steps, settings.stub_job_step_ms / 1000
             )
         }
-    return {JobKind.indexing: make_indexing_handler(settings, sessions, detector_factory)}
+    return {
+        JobKind.indexing: make_indexing_handler(
+            settings, sessions, detector_factory, extractors=extractors
+        )
+    }
