@@ -16,6 +16,7 @@ from app.vision.pipeline import DetectionCancelled
 from app.vision.tracker import Track
 
 PALETTE = ("white", "black", "gray", "red", "orange", "yellow", "green", "blue")
+COLOR_NAMES = PALETTE  # what a track's `attrs["color"]` can be
 COLORS = ("red", "orange", "yellow", "green", "blue")
 VEHICLES = frozenset({"car", "truck", "bus", "motorcycle"})
 

@@ -92,13 +92,6 @@ def test_vehicles_has_type_table(client: TestClient, vid: str) -> None:
     assert any(b["type"] == "table" and b.get("title") == "By type" for b in blocks)
 
 
-def test_color_question_has_caveat(client: TestClient, vid: str) -> None:
-    seed(client, vid)
-    text, blocks = ask(client, vid, "How many red cars?")
-    assert "colors" in text.lower() or "colours" in text.lower()
-    assert stat(blocks) == 3
-
-
 def test_unknown_subject(client: TestClient, vid: str) -> None:
     seed(client, vid)
     text, blocks = ask(client, vid, "How many trees?")
@@ -171,3 +164,77 @@ def test_timestamps_have_no_duplicates(client: TestClient, vid: str) -> None:
     _, blocks = ask(client, vid, "How many cars?")
     times = next(b["times"] for b in blocks if b["type"] == "timestamps")
     assert len(times) == len(set(times)) == 2
+
+
+def seed_colored(client: TestClient, vid: str) -> None:
+    tracks = [
+        make_track(1, "car", 0, 3),
+        make_track(2, "car", 5, 8),
+        make_track(3, "car", 10, 13),
+        make_track(4, "car", 15, 18),
+        make_track(5, "truck", 20, 25),
+        make_track(6, "car", 26, 29),  # color unknown
+        make_track(7, "person", 2, 9),
+    ]
+    for tr, color in zip(tracks, ["red", "red", "blue", "gray", "white"], strict=False):
+        tr.attrs["color"] = color
+    with client.app.state.session_factory() as s:  # type: ignore[attr-defined]
+        store.start_index(s, vid, {})
+        store.save_index(s, vid, tracks=tracks, frames=10, width=64, height=48)
+
+
+def test_color_filter_counts_only_that_color(client: TestClient, vid: str) -> None:
+    seed_colored(client, vid)
+    text, blocks = ask(client, vid, "How many red cars?")
+    assert stat(blocks) == 2
+    assert "**2 red cars**" in text
+    assert "1 other cars" in text  # the colorless car is mentioned, not silently dropped
+    assert "estimated from the footage" in text
+
+
+def test_several_colors_add_a_breakdown(client: TestClient, vid: str) -> None:
+    seed_colored(client, vid)
+    text, blocks = ask(client, vid, "How many red or blue cars?")
+    assert stat(blocks) == 3
+    table = next(b for b in blocks if b.get("title") == "By color")
+    assert {r["color"]: r["count"] for r in table["rows"]} == {"red": 2, "blue": 1}
+    assert "red or blue cars" in text
+
+
+def test_cars_by_color_table_includes_unknown_last(client: TestClient, vid: str) -> None:
+    seed_colored(client, vid)
+    _, blocks = ask(client, vid, "What colors are the cars?")
+    table = next(b for b in blocks if b.get("title") == "By color")
+    rows = table["rows"]
+    assert stat(blocks) == 5  # all cars, nothing filtered out
+    assert rows[0] == {"color": "red", "count": 2, "share": 0.4}
+    assert rows[-1]["color"] == "unknown"
+
+
+def test_silver_means_gray(client: TestClient, vid: str) -> None:
+    seed_colored(client, vid)
+    text, blocks = ask(client, vid, "How many silver cars?")
+    assert stat(blocks) == 1
+    assert "treated as one color" in text
+
+
+def test_no_matching_color(client: TestClient, vid: str) -> None:
+    seed_colored(client, vid)
+    text, blocks = ask(client, vid, "How many green cars?")
+    assert "didn't find any green cars" in text
+    assert stat(blocks) == 0
+
+
+def test_colors_for_people_are_declined(client: TestClient, vid: str) -> None:
+    seed_colored(client, vid)
+    text, blocks = ask(client, vid, "How many people in red?")
+    assert "only estimate colors for vehicles" in text
+    assert stat(blocks) == 1  # the person is still counted
+
+
+def test_detections_table_shows_color(client: TestClient, vid: str) -> None:
+    seed_colored(client, vid)
+    _, blocks = ask(client, vid, "List the red cars")
+    table = next(b for b in blocks if b["type"] == "table")
+    assert [c["key"] for c in table["columns"]] == ["n", "time", "object", "color", "confidence"]
+    assert {r["color"] for r in table["rows"]} == {"red"}
