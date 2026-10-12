@@ -62,6 +62,10 @@ _SUBJECTS: list[tuple[re.Pattern[str], Subject]] = [
 _COLOR_WORDS = {name: name for name in COLOR_NAMES} | {"silver": "gray", "grey": "gray"}
 _COLOR_RX = re.compile(r"\b(" + "|".join(_COLOR_WORDS) + r")\b")
 _WANTS_BREAKDOWN = re.compile(r"\b(by colou?rs?|what colou?rs?|which colou?rs?|colou?rs?)\b")
+_HELMET_NO = re.compile(
+    r"\b(without|no|not wearing|missing|lacking)\s+(a\s+|any\s+)?(helmets?|hard ?hats?)\b"
+)
+_HELMET_YES = re.compile(r"\b(helmets?|helmeted|hard ?hats?)\b")
 _WANTS_TABLE = re.compile(r"\b(table|list|breakdown|details?|each|show)\b", re.IGNORECASE)
 
 SUPPORTED = "cars, trucks, buses, motorcycles, bicycles, people, or vehicles in general"
@@ -71,6 +75,10 @@ OPEN_VOCAB_NOTE = (
 )
 # Asks the server to start searching a video for a new term (raises ValueError if it can't).
 Searcher = Callable[[str], None]
+HELMET_CAVEAT = (
+    "Helmets are judged by an AI vision model from a couple of frames per person, so far-away "
+    "or partly hidden people can be missed."
+)
 COLOR_CAVEAT = (
     "Colors are estimated from the footage, so similar shades (dark blue vs. black, "
     "silver vs. gray) can blur."
@@ -88,6 +96,14 @@ def parse_subject(question: str) -> Subject | None:
     return _CAR  # e.g. "show me everything in the first minute": default to cars
 
 
+def parse_helmet(question: str) -> bool | None:
+    """True for "with helmets", False for "without helmets", None when not asked."""
+    q = question.lower()
+    if _HELMET_NO.search(q):
+        return False
+    return True if _HELMET_YES.search(q) else None
+
+
 def parse_colors(question: str) -> list[str]:
     """Palette colors the question asks for, in order, without repeats ("silver" -> gray)."""
     found = (_COLOR_WORDS[w] for w in _COLOR_RX.findall(question.lower()))
@@ -103,7 +119,8 @@ def _round1(x: float) -> float:
 
 
 def _color(track: TrackRecord) -> str | None:
-    return (track.attrs or {}).get("color")
+    value = (track.attrs or {}).get("color")
+    return value if isinstance(value, str) else None
 
 
 def answer(session: Session, req: AnalyzeRequest, searcher: Searcher | None = None) -> Reply:
@@ -141,8 +158,35 @@ def answer(session: Session, req: AnalyzeRequest, searcher: Searcher | None = No
         notes.append(f"I only estimate colors for vehicles, so this counts all {subject.plural}.")
         colors, breakdown = [], False
 
+    # Helmets are only judged on people, and only when the helmet check ran on this video.
+    helmet = parse_helmet(q)
+    helmet_notes: list[str] = []
+    if helmet is not None:
+        if set(subject.classes) != {"person"}:
+            helmet_notes.append(
+                f"I only check helmets on people, so this counts all {subject.plural}."
+            )
+            helmet = None
+        elif not any("helmet" in (t.attrs or {}) for t in tracks):
+            helmet_notes.append(
+                "The helmet check isn't available for this video (it needs an OpenAI key and "
+                "a re-analysis), so this counts everyone."
+            )
+            helmet = None
+
     label = subject.plural
     unknown = 0
+    if helmet is not None:
+        no_verdict = sum(1 for t in tracks if "helmet" not in (t.attrs or {}))
+        tracks = [t for t in tracks if (t.attrs or {}).get("helmet") is helmet]
+        label = f"people {'with' if helmet else 'without'} a helmet"
+        helmet_notes.append(HELMET_CAVEAT)
+        if no_verdict:
+            helmet_notes.append(
+                f"{no_verdict} other {'person' if no_verdict == 1 else 'people'} were too small "
+                "or unclear to judge and are not counted."
+            )
+
     if colors:
         unknown = sum(1 for t in tracks if _color(t) is None)
         tracks = [t for t in tracks if _color(t) in colors]
@@ -159,7 +203,7 @@ def answer(session: Session, req: AnalyzeRequest, searcher: Searcher | None = No
 
     span = f"{format_timecode(win.start)} – {format_timecode(win.end)}"
     where = span if win.from_prompt or scope.label != "Entire video" else "the entire video"
-    notes += _limitations(q)
+    notes += helmet_notes
 
     if count == 0:
         text = f"I didn't find any {label} in {scope.videoName} ({where})."
@@ -246,14 +290,6 @@ def _search_status(
         "a moment and I'll answer from what it finds.",
         blocks=[],
     )
-
-
-def _limitations(q: str) -> list[str]:
-    """Be upfront about filters we can't apply yet instead of silently ignoring them."""
-    notes = []
-    if re.search(r"\bhelmets?\b", q):
-        notes.append("I can't check for helmets yet, so this counts everyone.")
-    return notes
 
 
 def _not_ready(state: IndexState, progress: float, error: str | None) -> str:

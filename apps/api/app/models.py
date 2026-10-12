@@ -134,7 +134,7 @@ class TrackRecord(Base):
     # [[t, x1, y1, x2, y2, conf], ...] in source pixels, one entry per sampled frame.
     points: Mapped[list[list[float]]] = mapped_column(JSON)
     # Extracted properties, e.g. {"color": "red"}. Filled by the attribute extractors.
-    attrs: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
+    attrs: Mapped[dict[str, str | bool]] = mapped_column(JSON, default=dict)
 
 
 class VocabSearch(Base):

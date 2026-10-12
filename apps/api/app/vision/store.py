@@ -129,7 +129,7 @@ def query_tracks(
     cls: str | Sequence[str] | None = None,
     t_from: float | None = None,
     t_to: float | None = None,
-    attrs: Mapping[str, str] | None = None,
+    attrs: Mapping[str, str | bool] | None = None,
 ) -> list[TrackRecord]:
     """Tracks of a finished index that were on screen at any point in [t_from, t_to].
 

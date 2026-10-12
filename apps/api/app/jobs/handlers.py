@@ -16,6 +16,7 @@ from app.vision import store
 from app.vision.attributes import AttributeExtractor, run_extractors
 from app.vision.color import ColorExtractor
 from app.vision.detector import Detector, TermDetector, WorldDetector, YoloDetector
+from app.vision.helmet import HelmetExtractor, OpenAIHelmetClassifier
 from app.vision.pipeline import DetectionCancelled, detect_video
 from app.vision.tracker import Tracker, TrackerConfig
 
@@ -221,7 +222,15 @@ def make_search_handler(
 
 def default_extractors(settings: Settings) -> list[AttributeExtractor]:
     """The attribute extractors a normal (non-test) indexing job runs."""
-    return [ColorExtractor(settings.detect_fps)] if settings.extract_color else []
+    found: list[AttributeExtractor] = []
+    if settings.extract_color:
+        found.append(ColorExtractor(settings.detect_fps))
+    if settings.openai_api_key:
+        classifier = OpenAIHelmetClassifier(settings.openai_api_key, settings.vision_model)
+        found.append(
+            HelmetExtractor(classifier, settings.detect_fps, max_calls=settings.helmet_max_calls)
+        )
+    return found
 
 
 def default_handlers(
