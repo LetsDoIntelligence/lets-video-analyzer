@@ -100,3 +100,73 @@ class YoloDetector:
                 ]
             )
         return out
+
+
+class TermDetector(Detector, Protocol):
+    """A detector whose vocabulary is chosen at run time (open-vocabulary detection)."""
+
+    def set_terms(self, terms: Sequence[str]) -> None:
+        """Look for exactly these things; `Detection.cls` is the matching term."""
+        ...
+
+
+class WorldDetector:
+    """Ultralytics YOLO-World: finds whatever nouns it is told to, without retraining.
+
+    Slower and less precise than the fixed-class detector, so it is used on demand for terms
+    the built-in classes don't cover (trees, traffic lights...). Its text encoder (CLIP, about
+    340 MB) is downloaded next to the weights the first time terms are set.
+    """
+
+    def __init__(
+        self, weights: Path, *, device: str = "auto", conf: float = 0.15, imgsz: int = 640
+    ) -> None:
+        if not weights.exists():
+            raise FileNotFoundError(
+                f"YOLO-World weights not found at {weights}. "
+                "Run `python ml/tools/check_gpu.py --world` to download them."
+            )
+        import ultralytics.nn.text_model as text_model  # heavy import, kept lazy
+        from ultralytics import YOLOWorld  # type: ignore[attr-defined]
+
+        # Keep the CLIP download beside the other weights instead of in the working directory.
+        text_model.WEIGHTS_DIR = weights.parent  # type: ignore[attr-defined]
+        self._device = resolve_device(device)
+        self._conf = conf
+        self._imgsz = imgsz
+        self._terms: list[str] = []
+        self._model: Any = YOLOWorld(str(weights))
+
+    def set_terms(self, terms: Sequence[str]) -> None:
+        self._terms = list(terms)
+        self._model.set_classes(self._terms)
+
+    def detect(self, images: Sequence[np.ndarray]) -> list[list[Detection]]:
+        if not images:
+            return []
+        if not self._terms:
+            raise RuntimeError("set_terms() must be called before detect()")
+        results = self._model.predict(
+            list(images), device=self._device, conf=self._conf, imgsz=self._imgsz, verbose=False
+        )
+        out: list[list[Detection]] = []
+        for r in results:
+            boxes = r.boxes
+            if boxes is None or len(boxes) == 0:
+                out.append([])
+                continue
+            xyxy = boxes.xyxy.cpu().numpy()
+            confs = boxes.conf.cpu().numpy()
+            ids = boxes.cls.cpu().numpy().astype(int)
+            out.append(
+                [
+                    Detection(
+                        cls_id=int(c),
+                        cls=self._terms[int(c)],
+                        conf=float(p),
+                        box=(float(b[0]), float(b[1]), float(b[2]), float(b[3])),
+                    )
+                    for b, p, c in zip(xyxy, confs, ids, strict=True)
+                ]
+            )
+        return out

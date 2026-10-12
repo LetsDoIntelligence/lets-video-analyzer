@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     detect_fps: float = 5.0  # frames per second sampled for detection
     detect_batch_size: int = 8
     detect_conf: float = 0.25  # minimum detection confidence
+    # Open-vocabulary search for things the fixed detector can't see (trees, signs...).
+    search_weights: Path = API_ROOT.parent.parent / "ml" / "weights" / "yolov8s-worldv2.pt"
+    search_fps: float = 2.0  # sampled frames per second (these things mostly don't move)
+    search_conf: float = 0.15  # minimum confidence; open-vocabulary scores run lower
     extract_color: bool = True  # name each vehicle's color while indexing (local, cheap)
 
 

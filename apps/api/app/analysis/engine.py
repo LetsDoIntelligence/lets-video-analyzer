@@ -5,8 +5,10 @@ produces the same `Query`); everything after parsing - counting, charts, tables 
 """
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.analysis.mock import format_timecode, histogram, parse_time_window
@@ -20,11 +22,12 @@ from app.analysis.schemas import (
     TableColumn,
     TimestampsBlock,
 )
-from app.models import TrackRecord
+from app.models import Job, JobKind, SearchStatus, TrackRecord
 from app.schemas import IndexState
 from app.vision import store
 from app.vision.color import COLOR_NAMES, VEHICLES
 from app.vision.status import index_out
+from app.vision.vocab import extract_term, pluralize
 
 
 @dataclass(frozen=True)
@@ -38,7 +41,7 @@ _CAR = Subject(("car",), "car", "cars")
 _VEHICLE = Subject(("car", "truck", "bus", "motorcycle"), "vehicle", "vehicles")
 
 _SUBJECTS: list[tuple[re.Pattern[str], Subject]] = [
-    (re.compile(r"\b(vehicles?|traffic)\b"), _VEHICLE),
+    (re.compile(r"\b(vehicles?|traffic(?! (?:lights?|signs?|cones?)))\b"), _VEHICLE),
     (re.compile(r"\b(trucks?|lorr(?:y|ies))\b"), Subject(("truck",), "truck", "trucks")),
     (re.compile(r"\b(buses|bus)\b"), Subject(("bus",), "bus", "buses")),
     (
@@ -55,8 +58,6 @@ _SUBJECTS: list[tuple[re.Pattern[str], Subject]] = [
     ),
     (re.compile(r"\bcars?\b"), _CAR),
 ]
-_HOW_MANY = re.compile(r"\bhow many (?:\w+ )?(\w+)")
-_GENERIC = {"objects", "things", "items", "times", "of", "are", "were", "in"}
 # Words people use for the colors the extractor can name (silver is folded into gray).
 _COLOR_WORDS = {name: name for name in COLOR_NAMES} | {"silver": "gray", "grey": "gray"}
 _COLOR_RX = re.compile(r"\b(" + "|".join(_COLOR_WORDS) + r")\b")
@@ -64,6 +65,12 @@ _WANTS_BREAKDOWN = re.compile(r"\b(by colou?rs?|what colou?rs?|which colou?rs?|c
 _WANTS_TABLE = re.compile(r"\b(table|list|breakdown|details?|each|show)\b", re.IGNORECASE)
 
 SUPPORTED = "cars, trucks, buses, motorcycles, bicycles, people, or vehicles in general"
+OPEN_VOCAB_NOTE = (
+    "This comes from an open-vocabulary search, which is less precise than the built-in "
+    "detectors, so treat the number as a rough guide."
+)
+# Asks the server to start searching a video for a new term (raises ValueError if it can't).
+Searcher = Callable[[str], None]
 COLOR_CAVEAT = (
     "Colors are estimated from the footage, so similar shades (dark blue vs. black, "
     "silver vs. gray) can blur."
@@ -76,9 +83,8 @@ def parse_subject(question: str) -> Subject | None:
     for rx, subject in _SUBJECTS:
         if rx.search(q):
             return subject
-    m = _HOW_MANY.search(q)
-    if m and m.group(1) not in _GENERIC:
-        return None
+    if extract_term(q) is not None:
+        return None  # it names something else; the caller may search for it
     return _CAR  # e.g. "show me everything in the first minute": default to cars
 
 
@@ -100,26 +106,32 @@ def _color(track: TrackRecord) -> str | None:
     return (track.attrs or {}).get("color")
 
 
-def answer(session: Session, req: AnalyzeRequest) -> Reply:
-    """Build the reply for a video that exists in the database."""
+def answer(session: Session, req: AnalyzeRequest, searcher: Searcher | None = None) -> Reply:
+    """Build the reply for a video that exists in the database.
+
+    Things the fixed detector can't see ("trees") are searched for in the background when a
+    `searcher` is given; the reply says so, and asking again answers from the stored result.
+    """
     scope = req.scope
     state = index_out(session, scope.videoId)
     if state.state is not IndexState.ready:
         return Reply(text=_not_ready(state.state, state.progress, state.error), blocks=[])
 
     subject = parse_subject(req.question)
+    open_vocab = False
     if subject is None:
-        return Reply(
-            text=f"I can't detect that yet. Right now I can count {SUPPORTED}.",
-            blocks=[],
-        )
+        term = extract_term(req.question)
+        waiting = _search_status(session, req, term, searcher) if term else None
+        if term is None or waiting is not None:
+            return waiting or _unsupported()
+        subject, open_vocab = Subject((term,), term, pluralize(term)), True
 
     win = parse_time_window(req.question, scope)
     tracks = store.query_tracks(
         session, scope.videoId, cls=list(subject.classes), t_from=win.start, t_to=win.end
     )
     q = req.question.lower()
-    notes: list[str] = []
+    notes: list[str] = [OPEN_VOCAB_NOTE] if open_vocab else []
 
     # Colors only exist for vehicles; ignore them (and say so) for anything else.
     colors = parse_colors(q)
@@ -188,6 +200,52 @@ def answer(session: Session, req: AnalyzeRequest) -> Reply:
     if count and _WANTS_TABLE.search(req.question):
         blocks.append(_detections_table(entries, count))
     return Reply(text="\n\n".join(paragraphs), blocks=blocks)
+
+
+def _unsupported() -> Reply:
+    return Reply(
+        text=f"I can't detect that yet. Right now I can count {SUPPORTED}.",
+        blocks=[],
+    )
+
+
+def _search_status(
+    session: Session, req: AnalyzeRequest, term: str, searcher: Searcher | None
+) -> Reply | None:
+    """Reply for a term that is not searched yet / still being searched; None when it is done."""
+    vid, plural = req.scope.videoId, pluralize(term)
+    row = store.get_search(session, vid, term)
+    if row is not None and row.status == SearchStatus.done:
+        return None
+    if row is not None and row.status in (SearchStatus.pending, SearchStatus.running):
+        job = session.scalars(
+            select(Job)
+            .where(Job.video_id == vid, Job.kind == JobKind.search)
+            .order_by(Job.created_at.desc())
+        ).first()
+        pct = f" ({round(job.progress * 100)}%)" if job and job.progress else ""
+        return Reply(
+            text=f"I'm still searching {req.scope.videoName} for {plural}{pct}. "
+            "Ask again in a moment.",
+            blocks=[],
+        )
+    if searcher is None:
+        return _unsupported()
+    previous = row.error if row is not None else None  # a failed earlier attempt
+    store.request_search(session, vid, term)
+    try:
+        searcher(vid)
+    except ValueError:  # this server has no open-vocabulary search
+        session.delete(store.get_search(session, vid, term))
+        session.commit()
+        return _unsupported()
+    retry = f" The last attempt failed ({previous}); trying again." if previous else ""
+    return Reply(
+        text=f"I don't have a built-in detector for {plural}, so I'm searching "
+        f"{req.scope.videoName} for them now.{retry} This takes a short while, so ask again in "
+        "a moment and I'll answer from what it finds.",
+        blocks=[],
+    )
 
 
 def _limitations(q: str) -> list[str]:
