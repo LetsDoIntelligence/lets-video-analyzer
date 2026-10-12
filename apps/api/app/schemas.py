@@ -79,6 +79,8 @@ class IndexOut(CamelModel):
 class OverlayTrack(CamelModel):
     id: int
     cls: str
+    # What the attribute extractors found, e.g. {"color": "red"} or {"helmet": true}.
+    attrs: dict[str, str | bool] = Field(default_factory=dict)
     points: list[list[float]]  # [t, x1, y1, x2, y2] in source pixels
 
 

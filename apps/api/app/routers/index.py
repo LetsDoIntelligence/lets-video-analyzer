@@ -48,6 +48,7 @@ def get_detections(
         OverlayTrack(
             id=r.track_no,
             cls=r.cls,
+            attrs=dict(r.attrs or {}),
             points=[[p[0], p[1], p[2], p[3], p[4]] for p in r.points if start <= p[0] <= end],
         )
         for r in rows

@@ -2,13 +2,18 @@
 export interface OverlayTrack {
   id: number;
   cls: string;
+  /** What was found out about it, e.g. { color: "red" } or { helmet: true }. */
+  attrs?: Attrs;
   /** [t, x1, y1, x2, y2] */
   points: number[][];
 }
 
+export type Attrs = Record<string, string | boolean>;
+
 export interface Box {
   id: number;
   cls: string;
+  attrs?: Attrs;
   x1: number;
   y1: number;
   x2: number;
@@ -48,9 +53,17 @@ export function boxesAt(tracks: OverlayTrack[], t: number): Box[] {
       const only = next ?? prev;
       if (Math.abs(only[0] - t) <= MAX_GAP / 2) b = only;
     }
-    if (b) out.push({ id: tr.id, cls: tr.cls, x1: b[1], y1: b[2], x2: b[3], y2: b[4] });
+    if (b) out.push({ id: tr.id, cls: tr.cls, attrs: tr.attrs, x1: b[1], y1: b[2], x2: b[3], y2: b[4] });
   }
   return out;
+}
+
+/** Text for a box: "red car #3", or "person, helmet #7" when the helmet check ran. */
+export function boxLabel(b: Pick<Box, "id" | "cls" | "attrs">): string {
+  const { color, helmet } = b.attrs ?? {};
+  const name = typeof color === "string" ? `${color} ${b.cls}` : b.cls;
+  const extra = helmet === true ? ", helmet" : helmet === false ? ", no helmet" : "";
+  return `${name}${extra} #${b.id}`;
 }
 
 /** The rectangle the video's picture occupies inside an `object-contain` box. */

@@ -55,6 +55,19 @@ class ChartBlock(BaseModel):
     data: list[ChartPoint]
 
 
+class CategoryPoint(BaseModel):
+    label: str
+    value: float
+
+
+class CategoriesBlock(BaseModel):
+    """One bar per category (e.g. vehicle color), as opposed to a chart over time."""
+
+    type: Literal["categories"] = "categories"
+    title: str
+    data: list[CategoryPoint]
+
+
 class TableColumn(BaseModel):
     key: str
     label: str
@@ -75,7 +88,8 @@ class TimestampsBlock(BaseModel):
 
 
 ReplyBlock = Annotated[
-    StatBlock | ChartBlock | TableBlock | TimestampsBlock, Field(discriminator="type")
+    StatBlock | ChartBlock | CategoriesBlock | TableBlock | TimestampsBlock,
+    Field(discriminator="type"),
 ]
 
 

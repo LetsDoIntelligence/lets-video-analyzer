@@ -145,7 +145,7 @@ def test_openai_classifier_builds_request_and_hides_key(monkeypatch):
 
 def test_helmet_extractor_only_enabled_with_a_key(tmp_path):
     base = {"data_dir": tmp_path, "database_url": f"sqlite:///{tmp_path / 'x.db'}"}
-    assert "helmet" not in [e.name for e in default_extractors(Settings(**base))]
+    assert "helmet" not in [e.name for e in default_extractors(Settings(**base, openai_api_key=""))]
     keyed = Settings(**base, openai_api_key="sk-test")
     assert "helmet" in [e.name for e in default_extractors(keyed)]
     assert "sk-test" not in repr(keyed)

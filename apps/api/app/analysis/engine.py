@@ -14,6 +14,8 @@ from sqlalchemy.orm import Session
 from app.analysis.mock import format_timecode, histogram, parse_time_window
 from app.analysis.schemas import (
     AnalyzeRequest,
+    CategoriesBlock,
+    CategoryPoint,
     ChartBlock,
     Reply,
     ReplyBlock,
@@ -240,6 +242,7 @@ def answer(session: Session, req: AnalyzeRequest, searcher: Searcher | None = No
     if count and len(subject.classes) > 1:
         blocks.append(_by_type(tracks))
     if count and (breakdown or len(colors) > 1):
+        blocks.append(color_chart(tracks, label))
         blocks.append(_by_color(tracks))
     if count and _WANTS_TABLE.search(req.question):
         blocks.append(_detections_table(entries, count))
@@ -323,14 +326,26 @@ def _by_type(tracks: list[TrackRecord]) -> TableBlock:
     )
 
 
-def _by_color(tracks: list[TrackRecord]) -> TableBlock:
+def _color_counts(tracks: list[TrackRecord]) -> list[tuple[str, int]]:
     counts: dict[str, int] = {}
     for t in tracks:
         name = _color(t) or "unknown"
         counts[name] = counts.get(name, 0) + 1
-    total = len(tracks)
     # Unknown goes last whatever its size; the rest by count.
-    order = sorted(counts.items(), key=lambda kv: (kv[0] == "unknown", -kv[1], kv[0]))
+    return sorted(counts.items(), key=lambda kv: (kv[0] == "unknown", -kv[1], kv[0]))
+
+
+def color_chart(tracks: list[TrackRecord], noun: str) -> CategoriesBlock:
+    title = noun[0].upper() + noun[1:]
+    return CategoriesBlock(
+        title=f"{title} by color",
+        data=[CategoryPoint(label=c, value=n) for c, n in _color_counts(tracks)],
+    )
+
+
+def _by_color(tracks: list[TrackRecord]) -> TableBlock:
+    total = len(tracks)
+    order = _color_counts(tracks)
     return TableBlock(
         title="By color",
         columns=[

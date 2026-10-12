@@ -359,5 +359,37 @@
         ]
       }
     ]
+  },
+  {
+    "question": "what colors are the cars?",
+    "events": [
+      {
+        "type": "text",
+        "chunk": "Here is the color breakdown."
+      },
+      {
+        "type": "blocks",
+        "blocks": [
+          {
+            "type": "categories",
+            "title": "Cars by color",
+            "data": [
+              {
+                "label": "gray",
+                "value": 17.0
+              },
+              {
+                "label": "blue",
+                "value": 11.0
+              },
+              {
+                "label": "white",
+                "value": 10.0
+              }
+            ]
+          }
+        ]
+      }
+    ]
   }
 ]

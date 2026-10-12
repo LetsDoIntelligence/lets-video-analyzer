@@ -238,3 +238,25 @@ def test_detections_table_shows_color(client: TestClient, vid: str) -> None:
     table = next(b for b in blocks if b["type"] == "table")
     assert [c["key"] for c in table["columns"]] == ["n", "time", "object", "color", "confidence"]
     assert {r["color"] for r in table["rows"]} == {"red"}
+
+
+def test_color_breakdown_includes_a_category_chart(client: TestClient, vid: str) -> None:
+    seed_colored(client, vid)
+    _, blocks = ask(client, vid, "What colors are the cars?")
+    chart = next(b for b in blocks if b["type"] == "categories")
+    assert chart["title"] == "Cars by color"
+    assert {p["label"]: p["value"] for p in chart["data"]} == {
+        "red": 2,
+        "blue": 1,
+        "gray": 1,
+        "unknown": 1,
+    }
+    assert chart["data"][-1]["label"] == "unknown"
+
+
+def test_detections_carry_attributes(client: TestClient, vid: str) -> None:
+    seed_colored(client, vid)
+    body = client.get(f"/v1/videos/{vid}/detections", params={"start": 0, "end": 30}).json()
+    colors = {t["id"]: t["attrs"].get("color") for t in body["tracks"]}
+    assert colors[1] == "red"
+    assert colors[6] is None

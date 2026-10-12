@@ -30,7 +30,8 @@ export const PROMPT_GROUPS: PromptGroup[] = [
   {
     title: "Attributes",
     prompts: [
-      { id: "red", text: "How many are red?" },
+      { id: "red", text: "How many red cars?" },
+      { id: "colors", text: "What colors are the cars?" },
       { id: "helmets", text: "How many people with helmets?" },
     ],
   },

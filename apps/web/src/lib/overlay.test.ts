@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boxesAt, chunkOf, containRect, type OverlayTrack } from "@/lib/overlay";
+import { boxLabel, boxesAt, chunkOf, containRect, type OverlayTrack } from "@/lib/overlay";
 
 const car: OverlayTrack = {
   id: 1,
@@ -57,5 +57,18 @@ describe("chunkOf", () => {
     expect(chunkOf(0)).toBe(0);
     expect(chunkOf(29.9)).toBe(0);
     expect(chunkOf(30)).toBe(1);
+  });
+});
+
+describe("boxLabel", () => {
+  it("names the color and helmet when known", () => {
+    expect(boxLabel({ id: 3, cls: "car", attrs: { color: "red" } })).toBe("red car #3");
+    expect(boxLabel({ id: 7, cls: "person", attrs: { helmet: true } })).toBe("person, helmet #7");
+    expect(boxLabel({ id: 8, cls: "person", attrs: { helmet: false } })).toBe("person, no helmet #8");
+  });
+
+  it("falls back to the class", () => {
+    expect(boxLabel({ id: 1, cls: "truck" })).toBe("truck #1");
+    expect(boxLabel({ id: 2, cls: "car", attrs: {} })).toBe("car #2");
   });
 });

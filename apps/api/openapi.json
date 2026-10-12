@@ -194,7 +194,8 @@
       "JobKind": {
         "enum": [
           "probe",
-          "indexing"
+          "indexing",
+          "search"
         ],
         "title": "JobKind",
         "type": "string"
@@ -284,6 +285,20 @@
       },
       "OverlayTrack": {
         "properties": {
+          "attrs": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "title": "Attrs",
+            "type": "object"
+          },
           "cls": {
             "title": "Cls",
             "type": "string"
