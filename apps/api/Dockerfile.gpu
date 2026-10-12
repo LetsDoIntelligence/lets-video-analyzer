@@ -1,0 +1,39 @@
+# GPU image: FastAPI + PyTorch (CUDA) + Ultralytics YOLO11 + ByteTrack.
+# The CUDA runtime ships inside the PyTorch wheels; the host only needs the NVIDIA driver and the
+# NVIDIA Container Toolkit.
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    YOLO_CONFIG_DIR=/tmp/Ultralytics \
+    LETS_DATA_DIR=/data \
+    LETS_DATABASE_URL=sqlite:////data/lets.db \
+    LETS_DETECT_WEIGHTS=/models/yolo11s.pt
+
+# OpenCV (pulled in by ultralytics) needs these shared libraries.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# CUDA build of PyTorch first (cached layer), then the app with the `ml` extra.
+RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+
+COPY pyproject.toml ./
+COPY app ./app
+COPY alembic ./alembic
+COPY alembic.ini ./
+RUN pip install ".[ml]"
+
+# Bake the YOLO weights into the image (they are gitignored in the repo).
+RUN mkdir -p /models \
+    && python -c "from ultralytics.utils.downloads import attempt_download_asset as d; d('/models/yolo11s.pt')" \
+    && test -s /models/yolo11s.pt
+
+VOLUME /data
+EXPOSE 8000
+HEALTHCHECK --interval=15s --timeout=3s --start-period=30s \
+  CMD python -c "import urllib.request as u; u.urlopen('http://localhost:8000/v1/health')"
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

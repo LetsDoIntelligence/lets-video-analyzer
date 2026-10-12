@@ -1,0 +1,62 @@
+# Production stack, served by the host nginx under https://letsdointelligence.ai/videoanalyzer
+#   web  -> 127.0.0.1:3045  (Next.js, basePath /videoanalyzer, prefix NOT stripped by nginx)
+#   api  -> 127.0.0.1:8045  (FastAPI; nginx maps /videoanalyzer/api/* -> /v1/*)
+# Run:  docker compose -f docker-compose.prod.yml up -d --build
+services:
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.gpu
+    container_name: lets-video-analyzer-api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8045:8000"
+    # Needs the NVIDIA driver + NVIDIA Container Toolkit on the host.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    shm_size: "2gb"
+    environment:
+      LETS_ENV: production
+      LETS_CORS_ORIGINS: '["https://letsdointelligence.ai","https://www.letsdointelligence.ai"]'
+      # Real detection + tracking on the GPU, started right after upload (same as local dev).
+      LETS_INDEXING: yolo
+      LETS_AUTO_INDEX: "true"
+      LETS_DETECT_DEVICE: auto
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - lets-data:/data
+    networks:
+      - lets-video-network
+
+  web:
+    build:
+      context: ./apps/web
+      args:
+        # Browser-facing API URL (must be absolute; inlined at build time).
+        NEXT_PUBLIC_API_URL: https://letsdointelligence.ai/videoanalyzer/api
+        NEXT_PUBLIC_BASE_PATH: /videoanalyzer
+        NEXT_PUBLIC_USE_MOCKS: "false"
+    container_name: lets-video-analyzer-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3045:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - lets-video-network
+
+networks:
+  lets-video-network:
+    driver: bridge
+
+volumes:
+  lets-data:
+    driver: local

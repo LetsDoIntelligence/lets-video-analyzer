@@ -23,7 +23,7 @@ export const SAMPLE_VIDEOS: VideoItem[] = [
     name: "Synthetic traffic",
     description: "Test clip, not real footage",
     source: "sample",
-    src: "/samples/synthetic-traffic.mp4",
+    src: `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/samples/synthetic-traffic.mp4`,
     durationSec: 60,
   },
   {
