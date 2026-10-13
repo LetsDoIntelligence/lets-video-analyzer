@@ -105,6 +105,22 @@ test("real model: counts from the stored tracks and draws boxes over the video",
   await expect.poll(painted, { timeout: 10_000 }).toBe(true);
   await page.screenshot({ path: "test-results/overlay.png" });
 
+  // Colors: a breakdown table and a bar chart come from the stored attributes.
+  const regenerate = page.getByRole("button", { name: /regenerate/i });
+  await expect(regenerate).toHaveCount(1); // the first answer has finished
+  await expect(input).toBeEnabled();
+  await input.fill("what colors are the cars?");
+  await input.press("Enter");
+  await expect(log).toContainText("Cars by color", { timeout: 15_000 });
+  await expect(log.locator("figure").filter({ hasText: "Cars by color" })).toBeVisible();
+
+  // Something the fixed detector cannot see starts a background search instead of guessing.
+  await expect(regenerate).toHaveCount(2);
+  await expect(input).toBeEnabled();
+  await input.fill("how many traffic lights?");
+  await input.press("Enter");
+  await expect(log).toContainText(/searching/i, { timeout: 15_000 });
+
   // The toggle hides them.
   await page.locator("#player-boxes").click();
   await expect(page.getByTestId("detection-overlay")).toHaveCount(0);

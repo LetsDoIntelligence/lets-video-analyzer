@@ -37,6 +37,27 @@ Environment variables, prefixed `LETS_` (or a `.env` file in `apps/api`):
 | `LETS_DATA_DIR` | `apps/api/data` |
 | `LETS_DATABASE_URL` | SQLite file in the data dir |
 | `LETS_MAX_UPLOAD_BYTES` | 2 GB |
+| `LETS_EXTRACT_COLOR` | `true` (name each vehicle's color while analyzing) |
+| `OPENAI_API_KEY` | empty = helmet check off (put it in `apps/api/.env`, never commit it) |
+| `LETS_VISION_MODEL` | `gpt-4o-mini` (model for the helmet check) |
+| `LETS_HELMET_MAX_CALLS` | `150` (most image calls one video can make) |
+| `LETS_SEARCH_FPS` / `LETS_SEARCH_CONF` | `2.0` / `0.15` (open-vocabulary search) |
+
+## Attributes and open-vocabulary search
+
+- **Color** (cars, trucks, buses, motorcycles): worked out locally from a few crops per vehicle, no
+  model or API. Eight names: white, black, gray, red, orange, yellow, green, blue. Silver counts as
+  gray. Judged by eye on one clip; dark navy can read black and the odd maroon car reads gray.
+- **Helmet** (people): an OpenAI vision model looks at 2 crops per person. It only runs when
+  `OPENAI_API_KEY` is set, costs roughly cents per video, and is capped by `LETS_HELMET_MAX_CALLS`.
+  People it cannot judge are reported as such, never guessed. Without a key the reply says the
+  check is unavailable and counts everyone.
+- **Anything else** ("trees", "traffic lights"): YOLO-World searches the video for that word once,
+  in the background (about 17 s for 85 s of video on an RTX 4050), then answers from the result.
+  Counts are rough and the reply says so. Run `python ml/tools/check_gpu.py --world` once to
+  download its weights.
+- Videos analyzed before an extractor was turned on have no such attributes; use the re-run button
+  on the video to analyze it again.
 
 ## Database
 
