@@ -60,14 +60,37 @@ _HELMET_NO = re.compile(
 )
 _HELMET_YES = re.compile(r"\b(helmets?|helmeted|hard ?hats?)\b")
 _WANTS_TABLE = re.compile(r"\b(table|list|breakdown|details?|each|show)\b", re.IGNORECASE)
+_PEAK = re.compile(r"\b(busiest|peak|rush hour|most (?:cars|trucks|vehicles|people|traffic))\b")
+_MOST_COMMON = re.compile(
+    r"\b(most (?:common|popular|frequent)|dominant|top)\s+colou?rs?\b"
+    r"|\bwhich colou?rs? (?:is|are|was|were) (?:the )?(?:most|more)\b"
+    r"|\bcommonest colou?rs?\b"
+)
+_LAST_N = re.compile(r"\blast\s+(\d+(?:\.\d+)?)\s*(seconds?|secs?|s|minutes?|mins?|m)\b")
+_LAST_ONE = re.compile(r"\b(?:the\s+)?last\s+(second|minute)\b")
+_FIRST_HALF = re.compile(r"\b(?:first|1st)\s+half\b")
+_SECOND_HALF = re.compile(r"\b(?:second|2nd|last)\s+half\b")
+
+
+def join_subjects(subjects: list[Subject]) -> Subject:
+    """Several subjects as one: "cars and trucks" counts both (the reply adds a by-type table)."""
+    classes = tuple(dict.fromkeys(c for s in subjects for c in s.classes))
+    return Subject(
+        classes,
+        " or ".join(s.singular for s in subjects),
+        " and ".join(s.plural for s in subjects),
+    )
 
 
 def parse_subject(question: str) -> Subject | None:
-    """Which detected class the question is about; None if it asks about something we can't see."""
+    """The detected class(es) the question is about; None if it names something we can't see."""
     q = question.lower()
-    for rx, subject in _SUBJECTS:
-        if rx.search(q):
-            return subject
+    hits = [(m.start(), s) for rx, s in _SUBJECTS if (m := rx.search(q))]
+    if hits:
+        if any(s is _VEHICLE for _, s in hits):
+            return _VEHICLE  # already everything with wheels
+        ordered = [s for _, s in sorted(hits, key=lambda h: h[0])]
+        return ordered[0] if len(ordered) == 1 else join_subjects(ordered)
     if extract_term(q) is not None:
         return None  # it names something else; the caller may search for it
     return _CAR  # e.g. "show me everything in the first minute": default to cars
@@ -99,12 +122,32 @@ class Query:
     start: float
     end: float
     from_prompt: bool = False  # the time range came from the question, not the video scope
+    peak: bool = False  # "busiest minute": name the busiest stretch
+    most_common: bool = False  # "most common color": name the top color
     term: str | None = None
     colors: tuple[str, ...] = ()
     helmet: bool | None = None
     breakdown: bool = False  # "what colors...": split the answer by color
     wants_table: bool = False
     silver: bool = False  # the question said "silver" (which we fold into gray)
+
+
+def relative_window(question: str, duration: float) -> tuple[float, float] | None:
+    """ "the last 2 minutes", "the second half" ... resolved against the video length."""
+    q = question.lower()
+    if m := _LAST_N.search(q):
+        n = float(m.group(1)) * (60 if m.group(2).startswith("m") else 1)
+    elif m := _LAST_ONE.search(q):
+        n = 60.0 if m.group(1) == "minute" else 1.0
+    elif _FIRST_HALF.search(q):
+        return 0.0, duration / 2
+    elif _SECOND_HALF.search(q):
+        return duration / 2, duration
+    else:
+        return None
+    if n <= 0 or n >= duration:
+        return None
+    return duration - n, duration
 
 
 def parse_query(question: str, scope: ScopeInfo) -> Query:
@@ -117,16 +160,22 @@ def parse_query(question: str, scope: ScopeInfo) -> Query:
         if term is not None:
             subject = Subject((term,), term, pluralize(term))
     win = parse_time_window(question, scope)
+    start, end, from_prompt = win.start, win.end, win.from_prompt
+    if not from_prompt and (rel := relative_window(question, scope.duration)):
+        start, end, from_prompt = rel[0], rel[1], True
     colors = parse_colors(q)
+    most_common = bool(_MOST_COMMON.search(q)) and not colors
     return Query(
         subject=subject,
-        start=win.start,
-        end=win.end,
-        from_prompt=win.from_prompt,
+        start=start,
+        end=end,
+        from_prompt=from_prompt,
+        peak=bool(_PEAK.search(q)),
+        most_common=most_common,
         term=term,
         colors=tuple(colors),
         helmet=parse_helmet(q),
-        breakdown=bool(_WANTS_BREAKDOWN.search(q)) and not colors,
+        breakdown=(bool(_WANTS_BREAKDOWN.search(q)) or most_common) and not colors,
         wants_table=bool(_WANTS_TABLE.search(question)),
         silver="silver" in q,
     )

@@ -12,14 +12,17 @@ from app.analysis.schemas import ScopeInfo
 SCOPE = ScopeInfo(videoId="v", videoName="Clip", start=0, end=84, duration=84, label="Entire video")
 
 BASE = {
-    "subject": "car",
+    "subjects": ["car"],
     "term": None,
     "colors": [],
     "helmet": "unspecified",
     "start_sec": None,
     "end_sec": None,
     "last_sec": None,
+    "portion": "whole",
     "by_color": False,
+    "most_common_color": False,
+    "peak": False,
     "table": False,
 }
 
@@ -41,17 +44,16 @@ def test_simple_plan_uses_the_scope():
 
 
 def test_open_vocabulary_term_is_sanitized():
-    q = plan(subject="other", term="Red Traffic Lights!")
+    q = plan(subjects=[], term="Red Traffic Lights!")
     assert q.term == "traffic light"
     assert q.subject is not None and q.subject.classes == ("traffic light",)
     with pytest.raises(PlanError):
-        plan(subject="other", term=None)
-    with pytest.raises(PlanError):
-        plan(subject="other", term="x" * 200)
+        plan(subjects=[], term="x" * 200)
 
 
 def test_none_subject_is_unsupported_not_an_error():
-    assert plan(subject="none").subject is None
+    assert plan(subjects=[]).subject is None  # nothing to look for
+    assert plan(subjects=[], term=None).term is None
 
 
 @pytest.mark.parametrize("bad", [None, [], "car", 5])
@@ -62,7 +64,7 @@ def test_non_object_output_is_rejected(bad):
 
 def test_unknown_subject_is_rejected():
     with pytest.raises(PlanError):
-        plan(subject="spaceship")
+        plan(subjects=["spaceship"])
 
 
 def test_colors_are_filtered_and_exclusive_with_breakdown():
@@ -136,7 +138,7 @@ def test_request_is_schema_constrained_and_parsed(monkeypatch):
     assert "red cars in the first 30 sec" in body["messages"][1]["content"]
 
 
-@pytest.mark.parametrize("content", ["not json", "[1, 2]", json.dumps({**BASE, "subject": "x"})])
+@pytest.mark.parametrize("content", ["not json", "[1, 2]", json.dumps({**BASE, "subjects": ["x"]})])
 def test_bad_model_output_raises_plan_error(monkeypatch, content):
     monkeypatch.setattr(P.urllib.request, "urlopen", lambda req, timeout: reply(content))
     with pytest.raises(PlanError):
@@ -180,3 +182,24 @@ def test_missing_choices_is_a_plan_error(monkeypatch):
 def test_last_n_seconds_is_computed_here_not_by_the_model(last, expected):
     q = plan(last_sec=last)
     assert (q.start, q.end, q.from_prompt) == expected
+
+
+def test_several_subjects_are_joined():
+    q = plan(subjects=["car", "truck"])
+    assert q.subject is not None
+    assert q.subject.classes == ("car", "truck")
+    assert q.subject.plural == "cars and trucks"
+    assert plan(subjects=["car", "vehicle"]).subject == SUBJECT_BY_NAME["vehicle"]
+    assert plan(subjects=["car", "car"]).subject == SUBJECT_BY_NAME["car"]
+
+
+def test_portions_and_flags():
+    assert (plan(portion="first_half").start, plan(portion="first_half").end) == (0, 42)
+    q = plan(portion="second_half")
+    assert (q.start, q.end, q.from_prompt) == (42, 84, True)
+    # An explicit range beats the portion.
+    q = plan(portion="second_half", start_sec=10, end_sec=20)
+    assert (q.start, q.end) == (10, 20)
+    q = plan(peak=True, most_common_color=True)
+    assert q.peak and q.most_common and q.breakdown
+    assert not plan(most_common_color=True, colors=["red"]).most_common

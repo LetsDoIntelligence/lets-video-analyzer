@@ -9,7 +9,7 @@ from collections.abc import Callable
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.analysis.mock import format_timecode, histogram
+from app.analysis.mock import bucket_size, format_timecode, histogram
 from app.analysis.query import Query, Subject, parse_query
 from app.analysis.schemas import (
     AnalyzeRequest,
@@ -159,6 +159,10 @@ def answer(
             f"{unknown} other {subject.plural} in this window had no clear color and are not "
             "counted."
         )
+    if count and query.peak:
+        paragraphs.append(_peak_sentence(times, win.start, win.end, shown_noun(2)))
+    if count and breakdown and query.most_common and (top := _top_color(tracks)):
+        paragraphs.append(top)
     if colors or breakdown:
         paragraphs.append(COLOR_CAVEAT)
     if count:
@@ -187,6 +191,27 @@ def answer(
     if count and query.wants_table:
         blocks.append(_detections_table(entries, count))
     return Reply(text="\n\n".join(paragraphs), blocks=blocks)
+
+
+def _peak_sentence(times: list[float], start: float, end: float, noun: str) -> str:
+    """The busiest stretch (the same buckets the chart uses; the earliest wins a tie)."""
+    size = bucket_size(end - start)
+    best = max(histogram(times, start, end), key=lambda p: p.value)  # max keeps the first
+    stop = min(best.start + size, end)
+    return (
+        f"The busiest stretch was **{format_timecode(best.start)} – {format_timecode(stop)}**, "
+        f"with {best.value:g} {noun}."
+    )
+
+
+def _top_color(tracks: list[TrackRecord]) -> str | None:
+    known = [(c, n) for c, n in _color_counts(tracks) if c != "unknown"]
+    if not known:
+        return None
+    (name, n), total = known[0], sum(n for _, n in known)
+    tie = len(known) > 1 and known[1][1] == n
+    lead = "Tied for the most common color" if tie else "The most common color is"
+    return f"{lead} **{name}** ({n} of {total} with a clear color)."
 
 
 def _unsupported() -> Reply:

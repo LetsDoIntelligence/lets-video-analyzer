@@ -260,3 +260,30 @@ def test_detections_carry_attributes(client: TestClient, vid: str) -> None:
     colors = {t["id"]: t["attrs"].get("color") for t in body["tracks"]}
     assert colors[1] == "red"
     assert colors[6] is None
+
+
+def test_several_subjects_are_counted_together(client: TestClient, vid: str) -> None:
+    seed_colored(client, vid)  # 5 cars, 1 truck, 1 person
+    text, blocks = ask(client, vid, "How many cars and trucks?")
+    assert stat(blocks) == 6
+    assert "cars and trucks" in text
+    assert any(b.get("title") == "By type" for b in blocks)
+
+
+def test_busiest_stretch_is_named(client: TestClient, vid: str) -> None:
+    seed_colored(client, vid)
+    text, _ = ask(client, vid, "When were the most cars? the busiest period please")
+    assert "busiest stretch was **" in text
+
+
+def test_most_common_color(client: TestClient, vid: str) -> None:
+    seed_colored(client, vid)
+    text, blocks = ask(client, vid, "Which color is most common among the cars?")
+    assert "most common color is **red** (2 of 4" in text
+    assert any(b["type"] == "categories" for b in blocks)
+
+
+def test_relative_window_counts_only_that_part(client: TestClient, vid: str) -> None:
+    seed_colored(client, vid)
+    _, blocks = ask(client, vid, "How many cars in the second half of the video?")
+    assert stat(blocks) == 2  # the two vehicle tracks starting after 15 s that are cars

@@ -1,3 +1,5 @@
+import pytest
+
 from app.analysis.query import Query, parse_query
 from app.analysis.schemas import ScopeInfo
 
@@ -56,3 +58,44 @@ def test_query_is_immutable():
 
     with pytest.raises(dataclasses.FrozenInstanceError):
         q("cars").helmet = True  # type: ignore[misc]
+
+
+def test_several_subjects_in_one_question():
+    query = q("how many cars and trucks?")
+    assert query.subject is not None
+    assert query.subject.classes == ("car", "truck")
+    assert query.subject.singular == "car or truck"
+    ordered = q("trucks, then cars")
+    assert ordered.subject is not None and ordered.subject.classes == ("truck", "car")
+    assert q("vehicles and cars").subject == q("how many vehicles").subject
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("cars in the last 2 minutes", (0, 120)),  # 120 s video: the whole thing
+        ("cars in the last 30 sec", (90, 120)),
+        ("cars in the last 1 min", (60, 120)),
+        ("cars in the last minute", (60, 120)),
+        ("cars in the first half", (0, 60)),
+        ("cars in the second half of the video", (60, 120)),
+        ("cars in the last half", (60, 120)),
+    ],
+)
+def test_relative_windows(text, expected):
+    query = q(text)
+    assert (query.start, query.end) == expected
+    assert query.from_prompt == (expected != (0, 120))
+
+
+def test_explicit_times_beat_relative_words():
+    assert (q("cars between 0:10 and 0:20 of the first half").start) == 10
+
+
+def test_peak_and_most_common_color():
+    assert q("what was the busiest minute for cars?").peak
+    assert not q("how many cars").peak
+    top = q("which color is most common among the cars?")
+    assert top.most_common and top.breakdown
+    assert q("what is the most common color").most_common
+    assert not q("how many red cars").most_common
