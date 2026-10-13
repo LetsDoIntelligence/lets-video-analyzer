@@ -1,17 +1,16 @@
 """Answer questions from the stored detection/tracking index (no model runs per question).
 
-Question understanding is rule-based for now (Phase 5 replaces it with an LLM planner that
-produces the same `Query`); everything after parsing - counting, charts, tables - is final.
+Question understanding lives in query.py (rules now, an LLM planner in Phase 5, both
+producing a `Query`); everything after parsing - counting, charts, tables - is here.
 """
 
-import re
 from collections.abc import Callable
-from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.analysis.mock import format_timecode, histogram, parse_time_window
+from app.analysis.mock import format_timecode, histogram
+from app.analysis.query import Query, Subject, parse_query
 from app.analysis.schemas import (
     AnalyzeRequest,
     CategoriesBlock,
@@ -27,48 +26,9 @@ from app.analysis.schemas import (
 from app.models import Job, JobKind, SearchStatus, TrackRecord
 from app.schemas import IndexState
 from app.vision import store
-from app.vision.color import COLOR_NAMES, VEHICLES
+from app.vision.color import VEHICLES
 from app.vision.status import index_out
-from app.vision.vocab import extract_term, pluralize
-
-
-@dataclass(frozen=True)
-class Subject:
-    classes: tuple[str, ...]  # detector classes that count as this subject
-    singular: str
-    plural: str
-
-
-_CAR = Subject(("car",), "car", "cars")
-_VEHICLE = Subject(("car", "truck", "bus", "motorcycle"), "vehicle", "vehicles")
-
-_SUBJECTS: list[tuple[re.Pattern[str], Subject]] = [
-    (re.compile(r"\b(vehicles?|traffic(?! (?:lights?|signs?|cones?)))\b"), _VEHICLE),
-    (re.compile(r"\b(trucks?|lorr(?:y|ies))\b"), Subject(("truck",), "truck", "trucks")),
-    (re.compile(r"\b(buses|bus)\b"), Subject(("bus",), "bus", "buses")),
-    (
-        re.compile(r"\b(motorcycles?|motorbikes?|scooters?)\b"),
-        Subject(("motorcycle",), "motorcycle", "motorcycles"),
-    ),
-    (
-        re.compile(r"\b(bicycles?|cyclists?|bikes?)\b"),
-        Subject(("bicycle",), "bicycle", "bicycles"),
-    ),
-    (
-        re.compile(r"\b(people|persons?|pedestrians?|workers?)\b"),
-        Subject(("person",), "person", "people"),
-    ),
-    (re.compile(r"\bcars?\b"), _CAR),
-]
-# Words people use for the colors the extractor can name (silver is folded into gray).
-_COLOR_WORDS = {name: name for name in COLOR_NAMES} | {"silver": "gray", "grey": "gray"}
-_COLOR_RX = re.compile(r"\b(" + "|".join(_COLOR_WORDS) + r")\b")
-_WANTS_BREAKDOWN = re.compile(r"\b(by colou?rs?|what colou?rs?|which colou?rs?|colou?rs?)\b")
-_HELMET_NO = re.compile(
-    r"\b(without|no|not wearing|missing|lacking)\s+(a\s+|any\s+)?(helmets?|hard ?hats?)\b"
-)
-_HELMET_YES = re.compile(r"\b(helmets?|helmeted|hard ?hats?)\b")
-_WANTS_TABLE = re.compile(r"\b(table|list|breakdown|details?|each|show)\b", re.IGNORECASE)
+from app.vision.vocab import pluralize
 
 SUPPORTED = "cars, trucks, buses, motorcycles, bicycles, people, or vehicles in general"
 OPEN_VOCAB_NOTE = (
@@ -87,31 +47,6 @@ COLOR_CAVEAT = (
 )
 
 
-def parse_subject(question: str) -> Subject | None:
-    """Which detected class the question is about; None if it asks about something we can't see."""
-    q = question.lower()
-    for rx, subject in _SUBJECTS:
-        if rx.search(q):
-            return subject
-    if extract_term(q) is not None:
-        return None  # it names something else; the caller may search for it
-    return _CAR  # e.g. "show me everything in the first minute": default to cars
-
-
-def parse_helmet(question: str) -> bool | None:
-    """True for "with helmets", False for "without helmets", None when not asked."""
-    q = question.lower()
-    if _HELMET_NO.search(q):
-        return False
-    return True if _HELMET_YES.search(q) else None
-
-
-def parse_colors(question: str) -> list[str]:
-    """Palette colors the question asks for, in order, without repeats ("silver" -> gray)."""
-    found = (_COLOR_WORDS[w] for w in _COLOR_RX.findall(question.lower()))
-    return list(dict.fromkeys(found))
-
-
 def _noun(subject: Subject, count: int) -> str:
     return subject.singular if count == 1 else subject.plural
 
@@ -125,43 +60,48 @@ def _color(track: TrackRecord) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def answer(session: Session, req: AnalyzeRequest, searcher: Searcher | None = None) -> Reply:
+def answer(
+    session: Session,
+    req: AnalyzeRequest,
+    searcher: Searcher | None = None,
+    query: Query | None = None,
+) -> Reply:
     """Build the reply for a video that exists in the database.
 
     Things the fixed detector can't see ("trees") are searched for in the background when a
     `searcher` is given; the reply says so, and asking again answers from the stored result.
+    `query` is what the question means; when omitted it is worked out with simple rules.
     """
     scope = req.scope
     state = index_out(session, scope.videoId)
     if state.state is not IndexState.ready:
         return Reply(text=_not_ready(state.state, state.progress, state.error), blocks=[])
 
-    subject = parse_subject(req.question)
-    open_vocab = False
+    query = query or parse_query(req.question, scope)
+    subject = query.subject
     if subject is None:
-        term = extract_term(req.question)
-        waiting = _search_status(session, req, term, searcher) if term else None
-        if term is None or waiting is not None:
-            return waiting or _unsupported()
-        subject, open_vocab = Subject((term,), term, pluralize(term)), True
+        return _unsupported()
+    open_vocab = query.term is not None
+    if query.term is not None:
+        waiting = _search_status(session, req, query.term, searcher)
+        if waiting is not None:
+            return waiting
 
-    win = parse_time_window(req.question, scope)
+    win = query  # start / end / from_prompt
     tracks = store.query_tracks(
         session, scope.videoId, cls=list(subject.classes), t_from=win.start, t_to=win.end
     )
-    q = req.question.lower()
     notes: list[str] = [OPEN_VOCAB_NOTE] if open_vocab else []
 
     # Colors only exist for vehicles; ignore them (and say so) for anything else.
-    colors = parse_colors(q)
-    breakdown = bool(_WANTS_BREAKDOWN.search(q)) and not colors
+    colors, breakdown = list(query.colors), query.breakdown
     colorable = set(subject.classes) <= VEHICLES
     if (colors or breakdown) and not colorable:
         notes.append(f"I only estimate colors for vehicles, so this counts all {subject.plural}.")
         colors, breakdown = [], False
 
     # Helmets are only judged on people, and only when the helmet check ran on this video.
-    helmet = parse_helmet(q)
+    helmet = query.helmet
     helmet_notes: list[str] = []
     if helmet is not None:
         if set(subject.classes) != {"person"}:
@@ -212,7 +152,7 @@ def answer(session: Session, req: AnalyzeRequest, searcher: Searcher | None = No
     else:
         text = f"I counted **{count} {shown_noun(count)}** in {scope.videoName} ({where})."
     paragraphs = [text, *notes]
-    if "silver" in q:
+    if query.silver:
         paragraphs.append("Silver and gray are treated as one color (gray).")
     if unknown:
         paragraphs.append(
@@ -244,7 +184,7 @@ def answer(session: Session, req: AnalyzeRequest, searcher: Searcher | None = No
     if count and (breakdown or len(colors) > 1):
         blocks.append(color_chart(tracks, label))
         blocks.append(_by_color(tracks))
-    if count and _WANTS_TABLE.search(req.question):
+    if count and query.wants_table:
         blocks.append(_detections_table(entries, count))
     return Reply(text="\n\n".join(paragraphs), blocks=blocks)
 

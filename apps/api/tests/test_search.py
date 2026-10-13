@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
-from app.analysis.engine import parse_subject
+from app.analysis.query import parse_subject
 from app.config import Settings
 from app.jobs.handlers import make_search_handler
 from app.main import create_app
