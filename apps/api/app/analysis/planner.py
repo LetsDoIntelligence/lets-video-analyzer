@@ -16,7 +16,7 @@ from typing import Any, Protocol
 from app.analysis.query import SUBJECT_BY_NAME, Query, Subject, join_subjects
 from app.analysis.schemas import ScopeInfo
 from app.vision.color import COLOR_NAMES
-from app.vision.vocab import normalize_term, pluralize
+from app.vision.vocab import MAX_TERM, normalize_term, pluralize
 
 logger = logging.getLogger("lets.planner")
 
@@ -60,11 +60,16 @@ SYSTEM = f"""You turn a user's question about a video into a JSON query. You do 
 
 Fields:
 - subjects: what to count, from {", ".join(SUBJECT_BY_NAME)}. Several are allowed ("cars and \
-trucks"). "vehicle" means cars, trucks, buses and motorcycles together. Use [] when the \
-subject is something else, or when the question is not about finding things in the video.
-- term: only when subjects is [] and the user asks about a specific other thing (trees, \
-traffic lights, signs, dogs...): its short singular name without colors. Otherwise null.
-- colors: colors the user restricts to (silver counts as gray), else [].
+trucks"). "vehicle" means cars, trucks, buses and motorcycles together, and is also what "traffic" \
+means. Synonyms count: sedans, SUVs, taxis and automobiles are "car"; lorries and pickups are \
+"truck"; pedestrians and workers are "person"; cyclists are "bicycle". Use [] when the subject is something else, or when the question is not about finding \
+things in the video.
+- term: only when subjects is [] and the user asks about a specific other physical thing that \
+can be seen and counted (trees, traffic lights, signs, dogs...): its short singular name \
+without colors. For anything not physical (weather, jokes, opinions) or when no thing is \
+named ("the red ones"), null.
+- colors: colors the user restricts to (silver counts as gray), else []. Colors apply even \
+when no thing is named ("the red ones" is colors ["red"], subjects []).
 - helmet: "with" or "without" when the user asks about people wearing / not wearing helmets, \
 else "unspecified".
 - start_sec, end_sec: the time range in seconds from the start of the video, only when the \
@@ -104,16 +109,21 @@ def build_query(data: object, question: str, scope: ScopeInfo) -> Query:
         subject = SUBJECT_BY_NAME["vehicle"] if "vehicle" in names else chosen[0]
         if len(chosen) > 1 and "vehicle" not in names:
             subject = join_subjects(chosen)
-    elif isinstance(data.get("term"), str):
+    elif isinstance(data.get("term"), str) and data["term"].strip():
         term = normalize_term(data["term"])
-        if term is None:
-            raise PlanError("planner gave no usable search term")
-        subject = Subject((term,), term, pluralize(term))
+        if term is not None:
+            subject = Subject((term,), term, pluralize(term))
+        elif len(data["term"]) > MAX_TERM:
+            raise PlanError("planner gave an unusable search term")
     colors = data.get("colors", [])
     if not isinstance(colors, list):
         raise PlanError("colors must be a list")
     clean_colors = tuple(dict.fromkeys(c for c in colors if c in COLOR_NAMES))
 
+    # "how many of the red ones": nothing named but a filter given, so it means cars.
+    assumed = subject is None and bool(clean_colors)
+    if assumed:
+        subject = SUBJECT_BY_NAME["car"]
     most_common = data.get("most_common_color") is True and not clean_colors
     helmet = {"with": True, "without": False}.get(str(data.get("helmet")))
 
@@ -132,6 +142,7 @@ def build_query(data: object, question: str, scope: ScopeInfo) -> Query:
         term=term,
         colors=clean_colors,
         helmet=helmet,
+        assumed_subject=assumed,
         peak=data.get("peak") is True,
         most_common=most_common,
         breakdown=(data.get("by_color") is True or most_common) and not clean_colors,
@@ -183,6 +194,8 @@ class OpenAIPlanner:
         self.model = model
         self._url = base_url.rstrip("/") + "/chat/completions"
         self._timeout = timeout
+        self.prompt_tokens = 0  # running totals, for cost reporting
+        self.completion_tokens = 0
 
     def plan(self, question: str, scope: ScopeInfo) -> Query:
         context = (
@@ -210,6 +223,9 @@ class OpenAIPlanner:
         try:
             with urllib.request.urlopen(req, timeout=self._timeout) as resp:  # noqa: S310
                 payload = json.load(resp)
+            usage = payload.get("usage") or {}
+            self.prompt_tokens += int(usage.get("prompt_tokens", 0))
+            self.completion_tokens += int(usage.get("completion_tokens", 0))
             content = payload["choices"][0]["message"]["content"]
             data = json.loads(content)
         except urllib.error.HTTPError as e:

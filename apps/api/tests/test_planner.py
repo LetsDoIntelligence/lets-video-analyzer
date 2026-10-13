@@ -203,3 +203,15 @@ def test_portions_and_flags():
     q = plan(peak=True, most_common_color=True)
     assert q.peak and q.most_common and q.breakdown
     assert not plan(most_common_color=True, colors=["red"]).most_common
+
+
+def test_unusable_term_is_not_an_error_but_has_no_subject():
+    assert plan(subjects=[], term="the").subject is None  # only filler words
+    assert plan(subjects=[], term="  ").subject is None
+
+
+def test_a_filter_without_a_noun_means_cars():
+    q = plan(subjects=[], term=None, colors=["red"])
+    assert q.subject is not None and q.subject.classes == ("car",) and q.assumed_subject
+    assert not plan(subjects=["truck"], colors=["red"]).assumed_subject
+    assert plan(subjects=[], term=None).subject is None  # nothing at all: off topic

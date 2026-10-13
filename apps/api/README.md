@@ -54,6 +54,27 @@ output is validated and clamped (known classes and colors only, times inside the
 Without a key, or if the call fails, simple rules read the question and the reply says so.
 Plans are cached per question, video and range. Costs a fraction of a cent per new question.
 
+### Evaluating question understanding
+
+`evaluation/cases.json` holds 42 questions with the expected `Query` (fields a case doesn't
+mention are not checked). Score both planners:
+
+```powershell
+python -m evaluation.run_planner_eval --rules   # offline, no API calls
+python -m evaluation.run_planner_eval           # also the AI planner (42 calls, about half a cent)
+```
+
+Results at the time of writing (the cases were also used to tune the rules and the prompt, so
+treat them as a floor on how it behaves on unseen wording, not a promise):
+
+| Planner | Correct | Known misses |
+|---|---|---|
+| Rules | 40/42 | off-topic questions ("what's the weather") are answered as cars, with a note |
+| AI (`gpt-4o-mini`) | 41/42 in the last run (it went 37 → 39 → 41 as the prompt was tuned on these same cases) | does not turn "show me cars" into a table |
+
+The AI planner takes about 0.9 s per new question and costs about $0.00014 (cached repeats are
+free). A test keeps the rules at 95% or better on this set.
+
 ## Attributes and open-vocabulary search
 
 - **Color** (cars, trucks, buses, motorcycles): worked out locally from a few crops per vehicle, no

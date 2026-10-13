@@ -39,7 +39,7 @@ _SUBJECTS: list[tuple[re.Pattern[str], Subject]] = [
         re.compile(r"\b(people|persons?|pedestrians?|workers?)\b"),
         Subject(("person",), "person", "people"),
     ),
-    (re.compile(r"\bcars?\b"), _CAR),
+    (re.compile(r"\b(cars?|automobiles?|suvs?|sedans?|taxis?)\b"), _CAR),
 ]
 # The built-in subjects by name (what the LLM planner picks from).
 SUBJECT_BY_NAME: dict[str, Subject] = {
@@ -60,7 +60,9 @@ _HELMET_NO = re.compile(
 )
 _HELMET_YES = re.compile(r"\b(helmets?|helmeted|hard ?hats?)\b")
 _WANTS_TABLE = re.compile(r"\b(table|list|breakdown|details?|each|show)\b", re.IGNORECASE)
-_PEAK = re.compile(r"\b(busiest|peak|rush hour|most (?:cars|trucks|vehicles|people|traffic))\b")
+_PEAK = re.compile(
+    r"\b(busiest|heaviest|peak|rush hour|most (?:cars|trucks|vehicles|people|traffic))\b"
+)
 _MOST_COMMON = re.compile(
     r"\b(most (?:common|popular|frequent)|dominant|top)\s+colou?rs?\b"
     r"|\bwhich colou?rs? (?:is|are|was|were) (?:the )?(?:most|more)\b"
@@ -68,6 +70,7 @@ _MOST_COMMON = re.compile(
 )
 _LAST_N = re.compile(r"\blast\s+(\d+(?:\.\d+)?)\s*(seconds?|secs?|s|minutes?|mins?|m)\b")
 _LAST_ONE = re.compile(r"\b(?:the\s+)?last\s+(second|minute)\b")
+_FIRST_ONE = re.compile(r"\b(?:the\s+)?first\s+(second|minute)\b")
 _FIRST_HALF = re.compile(r"\b(?:first|1st)\s+half\b")
 _SECOND_HALF = re.compile(r"\b(?:second|2nd|last)\s+half\b")
 
@@ -140,6 +143,8 @@ def relative_window(question: str, duration: float) -> tuple[float, float] | Non
         n = float(m.group(1)) * (60 if m.group(2).startswith("m") else 1)
     elif m := _LAST_ONE.search(q):
         n = 60.0 if m.group(1) == "minute" else 1.0
+    elif m := _FIRST_ONE.search(q):
+        return 0.0, min(60.0 if m.group(1) == "minute" else 1.0, duration)
     elif _FIRST_HALF.search(q):
         return 0.0, duration / 2
     elif _SECOND_HALF.search(q):
