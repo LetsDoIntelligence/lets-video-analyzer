@@ -120,6 +120,8 @@ test("real model: counts from the stored tracks and draws boxes over the video",
   await input.fill("how many traffic lights?");
   await input.press("Enter");
   await expect(log).toContainText(/searching/i, { timeout: 15_000 });
+  // ...and the same reply carries the answer once the search is done (no second ask).
+  await expect(log).toContainText(/open-vocabulary/i, { timeout: 120_000 });
 
   // The toggle hides them.
   await page.locator("#player-boxes").click();

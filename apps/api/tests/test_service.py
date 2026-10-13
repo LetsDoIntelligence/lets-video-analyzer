@@ -120,3 +120,25 @@ def test_planner_is_not_called_before_the_video_is_analyzed(
     text, _ = ask(client, vid, "how many cars?")
     assert "analy" in text.lower()
     assert fake.calls == 0
+
+
+def test_off_topic_question_gets_a_helpful_reply(client: TestClient, vid: str) -> None:  # noqa: F811
+    seed_colored(client, vid)
+    off = Query(subject=None, start=0, end=30)
+    use(client, QueryPlanner("auto", FakePlanner(off)))
+    text, blocks = ask(client, vid, "what is the weather like?")
+    assert "answer questions about what is in this video" in text and blocks == []
+
+
+def test_assumed_subject_is_disclosed(client: TestClient, vid: str) -> None:  # noqa: F811
+    seed_colored(client, vid)
+    text, _ = ask(client, vid, "show me everything in the first minute")
+    assert "didn't say what to count, so I counted cars" in text
+    text, _ = ask(client, vid, "how many trucks")
+    assert "didn't say" not in text
+
+
+def test_a_window_past_the_end_is_explained(client: TestClient, vid: str) -> None:  # noqa: F811
+    seed_colored(client, vid)
+    text, blocks = ask(client, vid, "how many cars between 5:00 and 6:00?")
+    assert "only 0:30 long" in text and blocks == []

@@ -80,7 +80,7 @@ def answer(
     query = query or parse_query(req.question, scope)
     subject = query.subject
     if subject is None:
-        return _unsupported()
+        return _off_topic()
     open_vocab = query.term is not None
     if query.term is not None:
         waiting = _search_status(session, req, query.term, searcher)
@@ -88,10 +88,18 @@ def answer(
             return waiting
 
     win = query  # start / end / from_prompt
+    if scope.duration > 0 and win.start >= scope.duration:
+        return Reply(
+            text=f"{scope.videoName} is only {format_timecode(scope.duration)} long, so there is "
+            f"nothing to look at from {format_timecode(win.start)}.",
+            blocks=[],
+        )
     tracks = store.query_tracks(
         session, scope.videoId, cls=list(subject.classes), t_from=win.start, t_to=win.end
     )
     notes: list[str] = [OPEN_VOCAB_NOTE] if open_vocab else []
+    if query.assumed_subject:
+        notes.append("You didn't say what to count, so I counted cars.")
 
     # Colors only exist for vehicles; ignore them (and say so) for anything else.
     colors, breakdown = list(query.colors), query.breakdown
@@ -214,6 +222,22 @@ def _top_color(tracks: list[TrackRecord]) -> str | None:
     return f"{lead} **{name}** ({n} of {total} with a clear color)."
 
 
+class PendingReply(Reply):
+    """A holding reply: a background search for `term` is running. The caller may wait for it
+    and answer again (the API stream does), or tell the user to ask again."""
+
+    term: str
+
+
+def _off_topic() -> Reply:
+    return Reply(
+        text="I answer questions about what is in this video, for example "
+        '"How many red cars in the first minute?". I can count '
+        f"{SUPPORTED}, and search for other things such as trees or traffic lights.",
+        blocks=[],
+    )
+
+
 def _unsupported() -> Reply:
     return Reply(
         text=f"I can't detect that yet. Right now I can count {SUPPORTED}.",
@@ -236,10 +260,10 @@ def _search_status(
             .order_by(Job.created_at.desc())
         ).first()
         pct = f" ({round(job.progress * 100)}%)" if job and job.progress else ""
-        return Reply(
-            text=f"I'm still searching {req.scope.videoName} for {plural}{pct}. "
-            "Ask again in a moment.",
+        return PendingReply(
+            text=f"I'm still searching {req.scope.videoName} for {plural}{pct}.",
             blocks=[],
+            term=term,
         )
     if searcher is None:
         return _unsupported()
@@ -252,11 +276,11 @@ def _search_status(
         session.commit()
         return _unsupported()
     retry = f" The last attempt failed ({previous}); trying again." if previous else ""
-    return Reply(
+    return PendingReply(
         text=f"I don't have a built-in detector for {plural}, so I'm searching "
-        f"{req.scope.videoName} for them now.{retry} This takes a short while, so ask again in "
-        "a moment and I'll answer from what it finds.",
+        f"{req.scope.videoName} for them now.{retry} This takes a short while.",
         blocks=[],
+        term=term,
     )
 
 

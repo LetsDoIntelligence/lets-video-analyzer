@@ -96,6 +96,7 @@ class Window:
     start: float
     end: float
     from_prompt: bool
+    beyond: float | None = None  # the question asked for a range that starts after the video ends
 
 
 def parse_time_window(question: str, scope: ScopeInfo) -> Window:
@@ -125,6 +126,8 @@ def parse_time_window(question: str, scope: ScopeInfo) -> Window:
             start, end = max(0.0, a), min(scope.duration, b)
             if end > start:
                 return Window(start, end, True)
+            if a >= scope.duration:
+                return Window(scope.start, scope.end, False, beyond=a)
     return fallback
 
 

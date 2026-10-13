@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.analysis.engine import answer
+from app.analysis.engine import PendingReply, answer
 from app.analysis.mock import build_reply
 from app.analysis.planner import PlanError
 from app.analysis.schemas import (
@@ -24,8 +24,9 @@ from app.analysis.schemas import (
 from app.analysis.service import FALLBACK_NOTE, Planned, QueryPlanner
 from app.config import Settings
 from app.jobs.runner import JobRunner
-from app.models import JobKind, Video
+from app.models import JobKind, SearchStatus, Video
 from app.schemas import IndexState
+from app.vision import store
 from app.vision.status import index_out
 
 logger = logging.getLogger("lets.api.analyze")
@@ -74,20 +75,60 @@ def _reply(
         return reply
 
 
+ASK_AGAIN = " Ask again in a moment and I'll answer from what it finds."
+SLOW_SEARCH = "\n\nThe search is taking longer than expected." + ASK_AGAIN
+POLL_SECONDS = 1.0
+
+
+def _search_over(factory: sessionmaker[Session], video_id: str, term: str) -> bool:
+    """True once the background search for `term` has finished (successfully or not)."""
+    with factory() as session:
+        row = store.get_search(session, video_id, term)
+        return row is None or row.status in (SearchStatus.done, SearchStatus.failed)
+
+
+def _chunks(text: str) -> list[str]:
+    return re.findall(r"\S+\s*|\s+", text)
+
+
 async def _events(
     req: AnalyzeRequest,
     settings: Settings,
     factory: sessionmaker[Session],
     runner: JobRunner,
     planner: QueryPlanner,
-) -> AsyncIterator[AnalyzeEvent]:
+) -> AsyncIterator[AnalyzeEvent | None]:
+    """The answer as events; `None` is a keep-alive while a background search is awaited."""
     think = settings.analyze_think_ms / 1000
     token = settings.analyze_token_ms / 1000
     await asyncio.sleep(think)
     reply = await run_in_threadpool(_reply, req, factory, runner, planner)
-    for chunk in re.findall(r"\S+\s*|\s+", reply.text):
+    for chunk in _chunks(reply.text):
         await asyncio.sleep(token)
         yield TextEvent(chunk=chunk)
+
+    if isinstance(reply, PendingReply):
+        # A new word is being searched for. Hold the answer open until the search ends
+        # instead of making the user ask twice.
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + settings.search_wait_s
+        over = False
+        while not over and loop.time() < deadline:
+            await asyncio.sleep(POLL_SECONDS)
+            yield None
+            over = await run_in_threadpool(_search_over, factory, req.scope.videoId, reply.term)
+        if not over:
+            yield TextEvent(chunk=SLOW_SEARCH if settings.search_wait_s > 0 else ASK_AGAIN)
+            return
+        yield TextEvent(chunk="\n\n")
+        reply = await run_in_threadpool(_reply, req, factory, runner, planner)
+        for chunk in _chunks(reply.text):
+            await asyncio.sleep(token)
+            yield TextEvent(chunk=chunk)
+        if isinstance(reply, PendingReply):  # a failed search was restarted
+            yield TextEvent(chunk=ASK_AGAIN)
+            return
+
     if reply.blocks:
         await asyncio.sleep(min(token * 8, 0.3))
         yield BlocksEvent(blocks=reply.blocks)
@@ -109,7 +150,7 @@ async def analyze(
     async def stream() -> AsyncIterator[str]:
         try:
             async for event in _events(req, settings, factory, runner, planner):
-                yield sse(event)
+                yield ": keep-alive\n\n" if event is None else sse(event)
         except asyncio.CancelledError:
             raise  # client went away
         except Exception:

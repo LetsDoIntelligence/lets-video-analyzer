@@ -275,3 +275,55 @@ def test_vague_questions_still_default_to_cars(question: str) -> None:
 
 def test_how_many_with_trailing_words_is_not_cars() -> None:
     assert parse_subject("how many trees are there?") is None
+
+
+# ---- answers that wait for the search ---------------------------------------------------
+
+
+def _client_with_search(settings: Settings, world: FakeWorld, wait: float) -> TestClient:
+    s = settings.model_copy(update={"search_wait_s": wait})
+    c = TestClient(create_app(s))
+    c.__enter__()
+    c.app.state.jobs.handlers[JobKind.search] = make_search_handler(  # type: ignore[attr-defined]
+        s,
+        c.app.state.session_factory,  # type: ignore[attr-defined]
+        detector_factory=lambda: world,
+    )
+    return c
+
+
+@pytest.fixture
+def waiting(settings: Settings, world: FakeWorld) -> Iterator[TestClient]:
+    c = _client_with_search(settings, world, wait=15)
+    yield c
+    c.__exit__(None, None, None)
+
+
+def test_the_answer_waits_for_the_search(waiting, upload) -> None:  # type: ignore[no-untyped-def]
+    vid = index_video(waiting, upload)
+    text, blocks = ask(waiting, vid, "How many trees?")
+    assert "I don't have a built-in detector for trees" in text
+    assert "**1 tree**" in text  # the same reply carries the real answer
+    assert "Ask again" not in text
+    assert stat(blocks) == 1
+
+
+def test_a_failed_search_says_so_and_asks_to_retry(waiting, upload, world) -> None:  # type: ignore[no-untyped-def]
+    world.error = RuntimeError("boom")
+    vid = index_video(waiting, upload)
+    text, blocks = ask(waiting, vid, "How many trees?")
+    assert "trying again" in text and "Ask again" in text
+    assert blocks == []
+
+
+def test_a_slow_search_falls_back_to_asking_again(settings, world, upload) -> None:  # type: ignore[no-untyped-def]
+    world.gate = threading.Event()
+    c = _client_with_search(settings, world, wait=0.05)
+    try:
+        vid = index_video(c, upload)
+        text, blocks = ask(c, vid, "How many trees?")
+        assert "taking longer than expected" in text and "Ask again" in text
+        assert blocks == []
+    finally:
+        world.gate.set()
+        c.__exit__(None, None, None)

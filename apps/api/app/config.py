@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     helmet_max_calls: int = 150
     # How questions are understood: "auto" = AI planner when a key is set, else (or if it
     # fails) simple rules; "llm" = AI only; "rules" = simple rules only (no API calls).
+    # How long an answer waits for a background search (seconds) before asking you to retry.
+    search_wait_s: float = 120.0
     planner: Literal["auto", "rules", "llm"] = "auto"
     planner_model: str = "gpt-4o-mini"
     planner_timeout: float = 15.0

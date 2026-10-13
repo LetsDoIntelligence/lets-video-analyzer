@@ -124,6 +124,7 @@ class Query:
     from_prompt: bool = False  # the time range came from the question, not the video scope
     peak: bool = False  # "busiest minute": name the busiest stretch
     most_common: bool = False  # "most common color": name the top color
+    assumed_subject: bool = False  # the question named nothing to count; cars were assumed
     term: str | None = None
     colors: tuple[str, ...] = ()
     helmet: bool | None = None
@@ -161,15 +162,20 @@ def parse_query(question: str, scope: ScopeInfo) -> Query:
             subject = Subject((term,), term, pluralize(term))
     win = parse_time_window(question, scope)
     start, end, from_prompt = win.start, win.end, win.from_prompt
+    if win.beyond is not None:  # asked about a stretch after the video ends: say so, not guess
+        start = end = win.beyond
+        from_prompt = True
     if not from_prompt and (rel := relative_window(question, scope.duration)):
         start, end, from_prompt = rel[0], rel[1], True
     colors = parse_colors(q)
     most_common = bool(_MOST_COMMON.search(q)) and not colors
+    assumed = subject is not None and term is None and not any(rx.search(q) for rx, _ in _SUBJECTS)
     return Query(
         subject=subject,
         start=start,
         end=end,
         from_prompt=from_prompt,
+        assumed_subject=assumed,
         peak=bool(_PEAK.search(q)),
         most_common=most_common,
         term=term,
