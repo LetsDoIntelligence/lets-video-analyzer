@@ -41,6 +41,16 @@ _SUBJECTS: list[tuple[re.Pattern[str], Subject]] = [
     ),
     (re.compile(r"\bcars?\b"), _CAR),
 ]
+# The built-in subjects by name (what the LLM planner picks from).
+SUBJECT_BY_NAME: dict[str, Subject] = {
+    "car": _CAR,
+    "truck": Subject(("truck",), "truck", "trucks"),
+    "bus": Subject(("bus",), "bus", "buses"),
+    "motorcycle": Subject(("motorcycle",), "motorcycle", "motorcycles"),
+    "bicycle": Subject(("bicycle",), "bicycle", "bicycles"),
+    "person": Subject(("person",), "person", "people"),
+    "vehicle": _VEHICLE,
+}
 # Words people use for the colors the extractor can name (silver is folded into gray).
 _COLOR_WORDS = {name: name for name in COLOR_NAMES} | {"silver": "gray", "grey": "gray"}
 _COLOR_RX = re.compile(r"\b(" + "|".join(_COLOR_WORDS) + r")\b")
