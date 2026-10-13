@@ -14,3 +14,16 @@ python ml/tools/check_gpu.py
 test inference and probes the test video in `test_video/` (gitignored).
 
 Without a GPU everything still runs on CPU, just slower.
+
+## Open-vocabulary search (YOLO-World)
+Questions about things the fixed detector doesn't know ("how many trees?", "traffic lights?") start
+a background search with YOLO-World. One-off setup:
+```powershell
+python ml/tools/check_gpu.py --world
+```
+This downloads `yolov8s-worldv2.pt` (25 MB) and its CLIP text encoder (about 340 MB, to
+`ml/weights/clip/`; the `clip` Python package is installed automatically from GitHub on first
+use, so `git` and internet access are needed once). Both are gitignored. On an RTX 4050 a search of
+the 84 s test clip takes about 17 s (8 s of that is loading and encoding the terms). Results are less
+precise than the fixed detector, and the reply says so.
+

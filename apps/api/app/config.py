@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 API_ROOT = Path(__file__).resolve().parent.parent
@@ -36,6 +36,20 @@ class Settings(BaseSettings):
     detect_fps: float = 5.0  # frames per second sampled for detection
     detect_batch_size: int = 8
     detect_conf: float = 0.25  # minimum detection confidence
+    # Open-vocabulary search for things the fixed detector can't see (trees, signs...).
+    search_weights: Path = API_ROOT.parent.parent / "ml" / "weights" / "yolov8s-worldv2.pt"
+    search_fps: float = 2.0  # sampled frames per second (these things mostly don't move)
+    search_conf: float = 0.15  # minimum confidence; open-vocabulary scores run lower
+    extract_color: bool = True  # name each vehicle's color while indexing (local, cheap)
+    # Helmet check on people via OpenAI vision. Off unless a key is set (in apps/api/.env
+    # as OPENAI_API_KEY, which is gitignored). Costs a little per video; `max_calls` caps it.
+    openai_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("OPENAI_API_KEY", "LETS_OPENAI_API_KEY"),
+        repr=False,
+    )
+    vision_model: str = "gpt-4o-mini"
+    helmet_max_calls: int = 150
 
 
 @lru_cache

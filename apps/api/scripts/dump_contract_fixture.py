@@ -7,7 +7,14 @@ import json
 from pathlib import Path
 
 from app.analysis.mock import build_reply
-from app.analysis.schemas import AnalyzeRequest, BlocksEvent, ScopeInfo, TextEvent
+from app.analysis.schemas import (
+    AnalyzeRequest,
+    BlocksEvent,
+    CategoriesBlock,
+    CategoryPoint,
+    ScopeInfo,
+    TextEvent,
+)
 
 OUT = Path(__file__).resolve().parents[2] / "web/src/lib/api/fixtures/analyze-events.json"
 QUESTIONS = [
@@ -32,6 +39,21 @@ for q in QUESTIONS:
     if reply.blocks:
         events.append(BlocksEvent(blocks=reply.blocks).model_dump(mode="json", exclude_none=True))
     streams.append({"question": q, "events": events})
+
+# The demo analyzer never splits by color; the real engine does. Cover that block type too.
+colors = CategoriesBlock(
+    title="Cars by color",
+    data=[CategoryPoint(label=c, value=n) for c, n in (("gray", 17), ("blue", 11), ("white", 10))],
+)
+streams.append(
+    {
+        "question": "what colors are the cars?",
+        "events": [
+            TextEvent(chunk="Here is the color breakdown.").model_dump(mode="json"),
+            BlocksEvent(blocks=[colors]).model_dump(mode="json", exclude_none=True),
+        ],
+    }
+)
 
 OUT.parent.mkdir(parents=True, exist_ok=True)
 OUT.write_text(json.dumps(streams, indent=2) + "\n", encoding="utf-8")

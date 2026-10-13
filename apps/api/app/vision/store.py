@@ -1,21 +1,34 @@
 """Persist and query the detection/tracking index (`video_indexes` + `tracks` tables)."""
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict
 from datetime import UTC, datetime
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.models import IndexStatus, TrackRecord, VideoIndex
+from app.models import IndexStatus, SearchStatus, TrackRecord, VideoIndex, VocabSearch
 from app.vision.tracker import Track, TrackerConfig
 
 
 def index_params(
-    *, model: str, sample_fps: float, conf: float, tracker: TrackerConfig
+    *,
+    model: str,
+    sample_fps: float,
+    conf: float,
+    tracker: TrackerConfig,
+    attributes: Sequence[str] = (),
 ) -> dict[str, object]:
     """What an index was built with. A stored index is reused only while this is unchanged."""
-    return {"model": model, "sample_fps": sample_fps, "conf": conf, "tracker": asdict(tracker)}
+    params: dict[str, object] = {
+        "model": model,
+        "sample_fps": sample_fps,
+        "conf": conf,
+        "tracker": asdict(tracker),
+    }
+    if attributes:  # absent when empty, so indexes built before attributes existed stay valid
+        params["attributes"] = sorted(attributes)
+    return params
 
 
 def get_index(session: Session, video_id: str) -> VideoIndex | None:
@@ -25,6 +38,7 @@ def get_index(session: Session, video_id: str) -> VideoIndex | None:
 def invalidate(session: Session, video_id: str) -> None:
     """Forget the index entirely (tracks and state), forcing a rebuild on the next job."""
     session.execute(delete(TrackRecord).where(TrackRecord.video_id == video_id))
+    session.execute(delete(VocabSearch).where(VocabSearch.video_id == video_id))
     session.execute(delete(VideoIndex).where(VideoIndex.video_id == video_id))
     session.commit()
     session.expire_all()  # bulk deletes bypass the identity map; don't serve stale rows
@@ -37,8 +51,12 @@ def is_current(session: Session, video_id: str, params: dict[str, object]) -> bo
 
 
 def start_index(session: Session, video_id: str, params: dict[str, object]) -> VideoIndex:
-    """Mark the video as being (re)indexed and drop the old tracks, so readers never see a mix."""
+    """Mark the video as being (re)indexed and drop the old tracks, so readers never see a mix.
+
+    Open-vocabulary searches go too: their tracks live in the same table.
+    """
     session.execute(delete(TrackRecord).where(TrackRecord.video_id == video_id))
+    session.execute(delete(VocabSearch).where(VocabSearch.video_id == video_id))
     index = get_index(session, video_id)
     if index is None:
         index = VideoIndex(video_id=video_id)
@@ -76,6 +94,7 @@ def save_index(
             t_in=t.t_in,
             t_out=t.t_out,
             confidence=round(t.confidence, 3),
+            attrs=dict(t.attrs),
             points=[
                 [round(p.t, 3), *(round(v, 1) for v in p.box), round(p.conf, 2)] for p in t.points
             ],
@@ -110,8 +129,12 @@ def query_tracks(
     cls: str | Sequence[str] | None = None,
     t_from: float | None = None,
     t_to: float | None = None,
+    attrs: Mapping[str, str | bool] | None = None,
 ) -> list[TrackRecord]:
-    """Tracks of a finished index that were on screen at any point in [t_from, t_to]."""
+    """Tracks of a finished index that were on screen at any point in [t_from, t_to].
+
+    `attrs` keeps only tracks whose attributes match every given key/value pair.
+    """
     index = get_index(session, video_id)
     if index is None or index.status != IndexStatus.done:
         return []
@@ -123,4 +146,80 @@ def query_tracks(
         stmt = stmt.where(TrackRecord.t_out >= t_from)
     if t_to is not None:
         stmt = stmt.where(TrackRecord.t_in <= t_to)
-    return list(session.scalars(stmt.order_by(TrackRecord.t_in, TrackRecord.track_no)))
+    rows = list(session.scalars(stmt.order_by(TrackRecord.t_in, TrackRecord.track_no)))
+    if attrs:
+        rows = [r for r in rows if all((r.attrs or {}).get(k) == v for k, v in attrs.items())]
+    return rows
+
+
+# ---- open-vocabulary searches ------------------------------------------------------------
+
+
+def get_search(session: Session, video_id: str, term: str) -> VocabSearch | None:
+    return session.get(VocabSearch, (video_id, term))
+
+
+def request_search(session: Session, video_id: str, term: str) -> VocabSearch:
+    """Ask for `term` to be searched for. A failed earlier attempt is retried."""
+    row = get_search(session, video_id, term)
+    if row is None:
+        row = VocabSearch(video_id=video_id, term=term)
+        session.add(row)
+    elif row.status == SearchStatus.failed:
+        row.status, row.error, row.finished_at = SearchStatus.pending, None, None
+    session.commit()
+    return row
+
+
+def pending_searches(session: Session, video_id: str) -> list[VocabSearch]:
+    return list(
+        session.scalars(
+            select(VocabSearch)
+            .where(VocabSearch.video_id == video_id, VocabSearch.status == SearchStatus.pending)
+            .order_by(VocabSearch.created_at, VocabSearch.term)
+        )
+    )
+
+
+def mark_searches(
+    session: Session, video_id: str, terms: Sequence[str], status: SearchStatus, error: str | None
+) -> None:
+    for term in terms:
+        row = get_search(session, video_id, term)
+        if row is not None:
+            row.status, row.error = status, error
+            if status in (SearchStatus.done, SearchStatus.failed):
+                row.finished_at = datetime.now(UTC)
+    session.commit()
+
+
+def save_search(
+    session: Session, video_id: str, terms: Sequence[str], tracks: Sequence[Track]
+) -> None:
+    """Store the tracks found for `terms` (replacing older ones) and mark those terms done."""
+    session.execute(
+        delete(TrackRecord).where(TrackRecord.video_id == video_id, TrackRecord.cls.in_(terms))
+    )
+    session.add_all(
+        TrackRecord(
+            video_id=video_id,
+            track_no=t.track_id,
+            cls=t.cls,
+            t_in=t.t_in,
+            t_out=t.t_out,
+            confidence=round(t.confidence, 3),
+            points=[
+                [round(p.t, 3), *(round(v, 1) for v in p.box), round(p.conf, 2)] for p in t.points
+            ],
+            attrs={},
+        )
+        for t in tracks
+    )
+    for term in terms:
+        row = get_search(session, video_id, term)
+        if row is not None:
+            row.status = SearchStatus.done
+            row.n_tracks = sum(1 for t in tracks if t.cls == term)
+            row.error = None
+            row.finished_at = datetime.now(UTC)
+    session.commit()

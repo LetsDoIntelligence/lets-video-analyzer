@@ -30,6 +30,12 @@ export const replyBlockSchema = z.discriminatedUnion("type", [
     data: z.array(z.object({ label: z.string(), start: z.number(), value: z.number() })),
   }),
   z.object({
+    type: z.literal("categories"),
+    title: z.string(),
+    /** One bar per category, e.g. vehicle color. */
+    data: z.array(z.object({ label: z.string(), value: z.number() })),
+  }),
+  z.object({
     type: z.literal("table"),
     title: z.string().optional(),
     columns: z.array(

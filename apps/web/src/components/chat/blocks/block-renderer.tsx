@@ -1,5 +1,6 @@
 "use client";
 
+import { CategoryChart } from "@/components/chat/blocks/category-chart";
 import { DataTable } from "@/components/chat/blocks/data-table";
 import { StatCard } from "@/components/chat/blocks/stat-card";
 import { TimeChip } from "@/components/chat/blocks/time-chip";
@@ -35,6 +36,7 @@ export function BlockRenderer({ blocks, videoId }: { blocks: ReplyBlock[]; video
             <StatCard label={block.label} value={block.value} caption={block.caption} />
           )}
           {block.type === "chart" && <TimelineChart block={block} videoId={videoId} />}
+          {block.type === "categories" && <CategoryChart block={block} />}
           {block.type === "table" && <DataTable block={block} videoId={videoId} />}
           {block.type === "timestamps" && <TimestampRow block={block} videoId={videoId} />}
         </div>

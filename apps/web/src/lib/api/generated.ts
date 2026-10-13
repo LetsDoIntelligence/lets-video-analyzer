@@ -321,7 +321,7 @@ export interface components {
          * JobKind
          * @enum {string}
          */
-        JobKind: "probe" | "indexing";
+        JobKind: "probe" | "indexing" | "search";
         /** JobOut */
         JobOut: {
             /**
@@ -351,6 +351,10 @@ export interface components {
         JobStatus: "queued" | "running" | "succeeded" | "failed" | "cancelled";
         /** OverlayTrack */
         OverlayTrack: {
+            /** Attrs */
+            attrs?: {
+                [key: string]: string | boolean;
+            };
             /** Cls */
             cls: string;
             /** Id */

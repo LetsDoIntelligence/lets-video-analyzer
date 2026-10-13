@@ -36,6 +36,7 @@ class Track:
     track_id: int
     points: list[TrackPoint] = field(default_factory=list)
     _cls_conf: dict[str, float] = field(default_factory=lambda: defaultdict(float))
+    attrs: dict[str, str | bool] = field(default_factory=dict)  # filled by attribute extractors
 
     def add(self, t: float, box: tuple[float, float, float, float], conf: float, cls: str) -> None:
         self.points.append(TrackPoint(t, box, conf))

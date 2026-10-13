@@ -25,6 +25,7 @@ class VideoStatus(enum.StrEnum):
 class JobKind(enum.StrEnum):
     probe = "probe"
     indexing = "indexing"  # detection + tracking (Phase 3)
+    search = "search"  # open-vocabulary search for terms the built-in detector lacks
 
 
 class JobStatus(enum.StrEnum):
@@ -36,6 +37,13 @@ class JobStatus(enum.StrEnum):
 
 
 class IndexStatus(enum.StrEnum):
+    running = "running"
+    done = "done"
+    failed = "failed"
+
+
+class SearchStatus(enum.StrEnum):
+    pending = "pending"
     running = "running"
     done = "done"
     failed = "failed"
@@ -125,3 +133,26 @@ class TrackRecord(Base):
     confidence: Mapped[float] = mapped_column(Float)  # mean detection confidence
     # [[t, x1, y1, x2, y2, conf], ...] in source pixels, one entry per sampled frame.
     points: Mapped[list[list[float]]] = mapped_column(JSON)
+    # Extracted properties, e.g. {"color": "red"}. Filled by the attribute extractors.
+    attrs: Mapped[dict[str, str | bool]] = mapped_column(JSON, default=dict)
+
+
+class VocabSearch(Base):
+    """A term (e.g. "tree") the user asked about that the built-in detector can't see.
+
+    Its tracks are stored in `tracks` with `cls` set to the term once the search is done.
+    """
+
+    __tablename__ = "vocab_searches"
+
+    video_id: Mapped[str] = mapped_column(
+        ForeignKey("videos.id", ondelete="CASCADE"), primary_key=True
+    )
+    term: Mapped[str] = mapped_column(String(32), primary_key=True)
+    status: Mapped[SearchStatus] = mapped_column(
+        Enum(SearchStatus, native_enum=False, length=20), default=SearchStatus.pending
+    )
+    n_tracks: Mapped[int] = mapped_column(Integer, default=0)
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

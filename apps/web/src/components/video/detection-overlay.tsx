@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { videosClient, type Detections } from "@/lib/api/videos-client";
-import { CHUNK, boxesAt, chunkOf, containRect, type OverlayTrack } from "@/lib/overlay";
+import { CHUNK, boxLabel, boxesAt, chunkOf, containRect, type OverlayTrack } from "@/lib/overlay";
 
 const COLORS: Record<string, string> = {
   car: "#4ade80",
@@ -88,7 +88,7 @@ export function DetectionOverlay({
       const bh = (b.y2 - b.y1) * sy;
       ctx.strokeStyle = color;
       ctx.strokeRect(x, y, bw, bh);
-      const label = `${b.cls} #${b.id}`;
+      const label = boxLabel(b);
       const tw = ctx.measureText(label).width + 8;
       const ly = Math.max(fit.y, y - 16);
       ctx.fillStyle = color;

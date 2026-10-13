@@ -21,6 +21,6 @@ describe("backend contract fixture", () => {
         f.events.flatMap((e) => ("blocks" in e ? (e.blocks as { type: string }[]).map((b) => b.type) : [])),
       ),
     );
-    expect(types).toEqual(new Set(["stat", "chart", "table", "timestamps"]));
+    expect(types).toEqual(new Set(["stat", "chart", "categories", "table", "timestamps"]));
   });
 });

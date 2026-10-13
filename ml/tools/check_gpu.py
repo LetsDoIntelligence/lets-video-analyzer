@@ -1,7 +1,10 @@
 """Check the ML environment: CUDA, YOLO weights, a test inference, and the test video.
 
 Usage (from repo root, env `lets-video` active):
-    python ml/tools/check_gpu.py [--model yolo11s.pt] [--video "test_video/Test Video.mp4"]
+    python ml/tools/check_gpu.py [--model yolo11s.pt] [--video "test_video/Test Video.mp4"] [--world]
+
+`--world` also fetches the open-vocabulary model (YOLO-World, 25 MB) and its CLIP text encoder
+(about 340 MB, installed/downloaded on first use) and runs a search for a few example nouns.
 """
 
 import argparse
@@ -22,6 +25,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default="yolo11s.pt")
     parser.add_argument("--video", default=str(ROOT / "test_video" / "Test Video.mp4"))
+    parser.add_argument("--world", action="store_true", help="also set up open-vocabulary search")
     args = parser.parse_args()
 
     print(f"torch {torch.__version__}, CUDA available: {torch.cuda.is_available()}")
@@ -57,6 +61,28 @@ def main() -> None:
             )
     else:
         print(f"video not found: {video}")
+
+    if args.world:
+        check_world(device)
+
+
+def check_world(device: int | str) -> None:
+    from ultralytics import YOLOWorld
+    import ultralytics.nn.text_model as text_model
+
+    weights = WEIGHTS / "yolov8s-worldv2.pt"
+    if not weights.exists():
+        attempt_download_asset(str(weights))
+    text_model.WEIGHTS_DIR = WEIGHTS  # keep the CLIP download next to the other weights
+    model = YOLOWorld(str(weights))
+    start = time.perf_counter()
+    model.set_classes(["tree", "traffic light", "road sign"])
+    print(f"yolov8s-worldv2: text encoder ready in {time.perf_counter() - start:.1f} s")
+    frame = np.random.randint(0, 255, (720, 1280, 3), dtype=np.uint8)
+    model.predict(frame, device=device, verbose=False)
+    start = time.perf_counter()
+    model.predict(frame, device=device, verbose=False)
+    print(f"yolov8s-worldv2: {(time.perf_counter() - start) * 1000:.0f} ms/frame (720p)")
 
 
 if __name__ == "__main__":

@@ -68,7 +68,12 @@ const apiDetectionsSchema = z.object({
   width: z.number(),
   height: z.number(),
   tracks: z.array(
-    z.object({ id: z.number(), cls: z.string(), points: z.array(z.array(z.number())) }),
+    z.object({
+      id: z.number(),
+      cls: z.string(),
+      attrs: z.record(z.string(), z.union([z.string(), z.boolean()])).default({}),
+      points: z.array(z.array(z.number())),
+    }),
   ),
 });
 
