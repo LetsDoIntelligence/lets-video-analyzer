@@ -62,8 +62,8 @@ Fields:
 - subjects: what to count, from {", ".join(SUBJECT_BY_NAME)}. Several are allowed ("cars and \
 trucks"). "vehicle" means cars, trucks, buses and motorcycles together, and is also what "traffic" \
 means. Synonyms count: sedans, SUVs, taxis and automobiles are "car"; lorries and pickups are \
-"truck"; pedestrians and workers are "person"; cyclists are "bicycle". Use [] when the subject is something else, or when the question is not about finding \
-things in the video.
+"truck"; pedestrians and workers are "person"; cyclists are "bicycle". Use [] when the \
+subject is something else, or when the question is not about finding things in the video.
 - term: only when subjects is [] and the user asks about a specific other physical thing that \
 can be seen and counted (trees, traffic lights, signs, dogs...): its short singular name \
 without colors. For anything not physical (weather, jokes, opinions) or when no thing is \
