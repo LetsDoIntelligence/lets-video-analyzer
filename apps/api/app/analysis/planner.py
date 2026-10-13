@@ -35,6 +35,7 @@ SCHEMA: dict[str, Any] = {
         "helmet",
         "start_sec",
         "end_sec",
+        "last_sec",
         "by_color",
         "table",
     ],
@@ -45,6 +46,7 @@ SCHEMA: dict[str, Any] = {
         "helmet": {"type": "string", "enum": HELMET_CHOICES},
         "start_sec": {"type": ["number", "null"]},
         "end_sec": {"type": ["number", "null"]},
+        "last_sec": {"type": ["number", "null"]},
         "by_color": {"type": "boolean"},
         "table": {"type": "boolean"},
     },
@@ -62,7 +64,9 @@ finding things in the video.
 - helmet: "with" or "without" when the user asks about people wearing / not wearing helmets, \
 else "unspecified".
 - start_sec, end_sec: the time range in seconds from the start of the video, only when the \
-user names one ("first 30 sec", "between 1:00 and 2:30", "the last minute"). Otherwise null.
+user names one ("first 30 sec", "between 1:00 and 2:30"). Otherwise null.
+- last_sec: for "the last N seconds/minutes" give N in seconds and leave start_sec and end_sec \
+null (do not compute the start yourself). Otherwise null.
 - by_color: true when the user wants the answer split or ranked by color.
 - table: true when the user asks for a table, list or details.
 
@@ -104,7 +108,9 @@ def build_query(data: object, question: str, scope: ScopeInfo) -> Query:
 
     helmet = {"with": True, "without": False}.get(str(data.get("helmet")))
 
-    start, end, from_prompt = _window(data.get("start_sec"), data.get("end_sec"), scope)
+    start, end, from_prompt = _window(
+        data.get("start_sec"), data.get("end_sec"), data.get("last_sec"), scope
+    )
     return Query(
         subject=subject,
         start=start,
@@ -125,9 +131,16 @@ def _num(value: object) -> float | None:
     return float(value) if math.isfinite(value) else None
 
 
-def _window(start: object, end: object, scope: ScopeInfo) -> tuple[float, float, bool]:
+def _window(
+    start: object, end: object, last: object, scope: ScopeInfo
+) -> tuple[float, float, bool]:
     """Clamp the planned range into the video; no (or nonsense) range means the scope."""
-    s, e = _num(start), _num(end)
+    s, e, n = _num(start), _num(end), _num(last)
+    if s is None and e is None and n is not None and n > 0:
+        # "the last N seconds": the model gives N, the arithmetic is ours.
+        if n >= scope.duration:
+            return scope.start, scope.end, False
+        return scope.duration - n, scope.duration, True
     if s is None and e is None:
         return scope.start, scope.end, False
     lo = max(0.0, min(s if s is not None else scope.start, scope.duration))

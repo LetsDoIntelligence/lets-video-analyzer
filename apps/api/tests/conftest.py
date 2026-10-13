@@ -42,6 +42,8 @@ def settings(tmp_path) -> Settings:  # type: ignore[no-untyped-def]
     return Settings(
         data_dir=tmp_path,
         database_url=f"sqlite:///{(tmp_path / 'test.db').as_posix()}",
+        openai_api_key="",  # never call out from tests, whatever is in the local .env
+        planner="rules",
         analyze_think_ms=0,
         analyze_token_ms=0,
         stub_job_steps=5,

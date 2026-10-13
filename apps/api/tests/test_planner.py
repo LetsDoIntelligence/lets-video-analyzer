@@ -18,6 +18,7 @@ BASE = {
     "helmet": "unspecified",
     "start_sec": None,
     "end_sec": None,
+    "last_sec": None,
     "by_color": False,
     "table": False,
 }
@@ -164,3 +165,18 @@ def test_missing_choices_is_a_plan_error(monkeypatch):
     monkeypatch.setattr(P.urllib.request, "urlopen", lambda req, timeout: Resp(b'{"choices": []}'))
     with pytest.raises(PlanError):
         OpenAIPlanner("sk-test").plan("q", SCOPE)
+
+
+@pytest.mark.parametrize(
+    ("last", "expected"),
+    [
+        (60, (24, 84, True)),
+        (10, (74, 84, True)),
+        (500, (0, 84, False)),  # longer than the video: the whole video
+        (0, (0, 84, False)),
+        (-5, (0, 84, False)),
+    ],
+)
+def test_last_n_seconds_is_computed_here_not_by_the_model(last, expected):
+    q = plan(last_sec=last)
+    assert (q.start, q.end, q.from_prompt) == expected

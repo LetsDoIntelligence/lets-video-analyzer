@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     )
     vision_model: str = "gpt-4o-mini"
     helmet_max_calls: int = 150
+    # How questions are understood: "auto" = AI planner when a key is set, else (or if it
+    # fails) simple rules; "llm" = AI only; "rules" = simple rules only (no API calls).
+    planner: Literal["auto", "rules", "llm"] = "auto"
+    planner_model: str = "gpt-4o-mini"
+    planner_timeout: float = 15.0
 
 
 @lru_cache

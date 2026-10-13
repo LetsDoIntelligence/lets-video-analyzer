@@ -41,7 +41,18 @@ Environment variables, prefixed `LETS_` (or a `.env` file in `apps/api`):
 | `OPENAI_API_KEY` | empty = helmet check off (put it in `apps/api/.env`, never commit it) |
 | `LETS_VISION_MODEL` | `gpt-4o-mini` (model for the helmet check) |
 | `LETS_HELMET_MAX_CALLS` | `150` (most image calls one video can make) |
+| `LETS_PLANNER` | `auto` (`auto` = AI question planner when `OPENAI_API_KEY` is set, falling back to simple rules if it fails; `llm` = AI only; `rules` = no API calls) |
+| `LETS_PLANNER_MODEL` / `LETS_PLANNER_TIMEOUT` | `gpt-4o-mini` / `15` seconds |
 | `LETS_SEARCH_FPS` / `LETS_SEARCH_CONF` | `2.0` / `0.15` (open-vocabulary search) |
+
+## How questions are understood
+
+A question becomes a small `Query` (what to look for, colors, helmet, time range), then the engine
+answers it from the stored tracks. With an OpenAI key the query is planned by a model using
+schema-constrained JSON; the model never sees the video data and never produces numbers, and its
+output is validated and clamped (known classes and colors only, times inside the video).
+Without a key, or if the call fails, simple rules read the question and the reply says so.
+Plans are cached per question, video and range. Costs a fraction of a cent per new question.
 
 ## Attributes and open-vocabulary search
 

@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
+from app.analysis.service import make_planner
 from app.config import Settings, get_settings
 from app.db import make_engine, make_session_factory, run_migrations
 from app.jobs.handlers import default_handlers
@@ -32,6 +33,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if stale := runner.recover():
             logger.warning("Marked %d interrupted job(s) as failed", stale)
         app.state.jobs = runner
+        app.state.planner = make_planner(settings)
         logger.info("LETS API %s started (env=%s)", __version__, settings.env)
         yield
         runner.shutdown()

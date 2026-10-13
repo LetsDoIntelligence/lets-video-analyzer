@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.analysis.engine import answer
 from app.analysis.mock import build_reply
+from app.analysis.planner import PlanError
 from app.analysis.schemas import (
     AnalyzeEvent,
     AnalyzeRequest,
@@ -20,9 +21,12 @@ from app.analysis.schemas import (
     Reply,
     TextEvent,
 )
+from app.analysis.service import FALLBACK_NOTE, Planned, QueryPlanner
 from app.config import Settings
 from app.jobs.runner import JobRunner
 from app.models import JobKind, Video
+from app.schemas import IndexState
+from app.vision.status import index_out
 
 logger = logging.getLogger("lets.api.analyze")
 router = APIRouter(tags=["analyze"])
@@ -40,7 +44,12 @@ def sse(event: BaseModel) -> str:
     return f"data: {event.model_dump_json(exclude_none=True)}\n\n"
 
 
-def _reply(req: AnalyzeRequest, factory: sessionmaker[Session], runner: JobRunner) -> Reply:
+def _reply(
+    req: AnalyzeRequest,
+    factory: sessionmaker[Session],
+    runner: JobRunner,
+    planner: QueryPlanner,
+) -> Reply:
     """Real answer from the video's index; built-in sample videos (not stored) stay simulated."""
     with factory() as session:
         if session.get(Video, req.scope.videoId) is None:
@@ -49,16 +58,33 @@ def _reply(req: AnalyzeRequest, factory: sessionmaker[Session], runner: JobRunne
         def search(video_id: str) -> None:
             runner.submit(video_id, JobKind.search)
 
-        return answer(session, req, search)
+        planned: Planned | None = None
+        # Only ask the AI planner when there is something to answer from.
+        if index_out(session, req.scope.videoId).state is IndexState.ready:
+            try:
+                planned = planner.plan(req.question, req.scope)
+            except PlanError:
+                return Reply(
+                    text="I couldn't work out that question just now. Please try again.",
+                    blocks=[],
+                )
+        reply = answer(session, req, search, planned.query if planned else None)
+        if planned is not None and planned.fallback:
+            reply = Reply(text=f"{reply.text}\n\n{FALLBACK_NOTE}", blocks=reply.blocks)
+        return reply
 
 
 async def _events(
-    req: AnalyzeRequest, settings: Settings, factory: sessionmaker[Session], runner: JobRunner
+    req: AnalyzeRequest,
+    settings: Settings,
+    factory: sessionmaker[Session],
+    runner: JobRunner,
+    planner: QueryPlanner,
 ) -> AsyncIterator[AnalyzeEvent]:
     think = settings.analyze_think_ms / 1000
     token = settings.analyze_token_ms / 1000
     await asyncio.sleep(think)
-    reply = await run_in_threadpool(_reply, req, factory, runner)
+    reply = await run_in_threadpool(_reply, req, factory, runner, planner)
     for chunk in re.findall(r"\S+\s*|\s+", reply.text):
         await asyncio.sleep(token)
         yield TextEvent(chunk=chunk)
@@ -78,10 +104,11 @@ async def analyze(
     """
     factory: sessionmaker[Session] = request.app.state.session_factory
     runner: JobRunner = request.app.state.jobs
+    planner: QueryPlanner = request.app.state.planner
 
     async def stream() -> AsyncIterator[str]:
         try:
-            async for event in _events(req, settings, factory, runner):
+            async for event in _events(req, settings, factory, runner, planner):
                 yield sse(event)
         except asyncio.CancelledError:
             raise  # client went away
